@@ -1,5 +1,5 @@
 -- Create Events Table
-create table if not exists events (
+create table if not exists match (
   id text primary key,           -- Combined ID (Date + Title + Key)
   date text,                     -- Display Date (e.g. "1.24 (sat)")
   iso_date text,                 -- Sortable Date (e.g. "2026-01-24")
@@ -17,8 +17,8 @@ create table if not exists events (
 );
 
 -- (Optional) Enable Row Level Security if needed, but for now we leave it open for Service Role writing.
-alter table events enable row level security;
+alter table match enable row level security;
 
 -- Policy: Allow Public Read access
-create policy "Allow Public Read" on events
+create policy "Allow Public Read" on match
   for select using (true);

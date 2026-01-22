@@ -10,7 +10,7 @@ export async function GET(request: Request) {
 
     // Fetch events from DB where iso_date >= startDate
     const { data, error } = await supabase
-        .from('events')
+        .from('match')
         .select('*')
         .gte('iso_date', startDate)
         .order('iso_date', { ascending: true });

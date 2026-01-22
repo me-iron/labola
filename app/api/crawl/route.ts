@@ -34,7 +34,7 @@ export async function GET(request: Request) {
 
         // 3. Upsert to Supabase
         const { error } = await supabase
-            .from('events')
+            .from('match')
             .upsert(dbEvents, { onConflict: 'id' });
 
         if (error) {
