@@ -1,11 +1,15 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { RefreshCw, MapPin, Calendar, Users, AlertCircle, TrendingUp } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import Link from 'next/link';
+import { RefreshCw, MapPin, Calendar, Users, AlertCircle, TrendingUp, Download, Upload } from 'lucide-react';
 import { transliterate } from '@/lib/transliterate';
+import { StatCard } from '@/components/StatCard';
+import { ChartCard } from '@/components/ChartCard';
+import { SupplyChart } from '@/components/SupplyChart';
+import { OrganizerChart } from '@/components/OrganizerChart';
 
 interface Event {
   id: string;
@@ -23,7 +27,7 @@ interface Event {
 }
 
 interface AnalyticsData {
-  byDate: { date: string; supply: number; booked: number }[];
+  byDate: { date: string; supply: number; booked: number; count: number; proceeding: number }[];
   byStadium: { stadium: string; supply: number; count: number }[];
   totalEvents: number;
   totalCapacity: number;
@@ -194,8 +198,9 @@ export default function Dashboard() {
   const updateData = async () => {
     setLoading(true);
     try {
-      const daysToFetch = period;
-      const startDate = period === 1 ? selectedDate : new Date().toISOString().substring(0, 10);
+      // Always fetch 30 days from today to ensure DB consistency
+      const daysToFetch = 30;
+      const startDate = new Date().toISOString().substring(0, 10);
 
       // Trigger Crawl (Write to DB)
       const res = await fetch(`/api/crawl?days=${daysToFetch}&startDate=${startDate}`);
@@ -214,6 +219,41 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const downloadCSV = () => {
+    if (filteredEvents.length === 0) {
+      alert('No data to export');
+      return;
+    }
+
+    const headers = ['ID', 'Date', 'Time', 'Title', 'Organizer', 'Region', 'Status', 'Booked', 'Capacity', 'URL'];
+    const rows = filteredEvents.map(e => [
+      e.id,
+      e.date,
+      e.time,
+      `"${e.title.replace(/"/g, '""')}"`, // Escape quotes
+      `"${translateContent(e.stadium).replace(/"/g, '""')}"`,
+      e.region || '',
+      translateStatus(e.status),
+      e.booked,
+      e.capacity,
+      e.url
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `labola_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   useEffect(() => {
@@ -338,9 +378,15 @@ export default function Dashboard() {
         {/* Header & Controls */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 border-b border-neutral-800 pb-6">
           <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
-              {t.title}
-            </h1>
+            <div className="flex items-center gap-4">
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
+                {t.title}
+              </h1>
+              <Link href="/upload" className="text-sm font-medium text-neutral-500 hover:text-indigo-400 transition-colors flex items-center gap-1 border border-neutral-800 rounded-full px-3 py-1 bg-neutral-900/50">
+                <Upload className="w-3 h-3" />
+                Upload CSV
+              </Link>
+            </div>
             <p className="text-neutral-400 mt-1">{t.subtitle}</p>
           </div>
 
@@ -383,6 +429,18 @@ export default function Dashboard() {
               <button onClick={() => setLang('ko')} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", lang === 'ko' ? "bg-emerald-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>KO</button>
               <button onClick={() => setLang('ja')} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", lang === 'ja' ? "bg-emerald-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>JA</button>
             </div>
+
+            <button
+              onClick={downloadCSV}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-200",
+                "bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 border border-neutral-700",
+                "text-neutral-300 hover:text-white"
+              )}
+            >
+              <Download className="w-4 h-4" />
+              CSV
+            </button>
 
             <button
               onClick={() => updateData()}
@@ -429,48 +487,19 @@ export default function Dashboard() {
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Supply by Date/Time */}
-          <ChartCard title={period === 1 ? (lang === 'ko' ? '시간별 공급량' : 'Hourly Supply') : (period === 30 ? (lang === 'ko' ? '월간 공급량 (일별)' : 'Monthly Supply (Daily)') : (lang === 'ko' ? '주간 공급량 (일별)' : 'Weekly Supply (Daily)'))}>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={analytics.byDate} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="date" stroke="#888" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#888" fontSize={12} tickLine={false} axisLine={false} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#171717', border: '1px solid #333', borderRadius: '8px' }}
-                  itemStyle={{ color: '#e5e5e5' }}
-                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                />
-                <Legend
-                  iconType="circle"
-                  // @ts-ignore
-                  payload={[
-                    { value: 'Total Events', type: 'circle', color: '#6366f1' },
-                    { value: 'Proceeding Events', type: 'circle', color: '#10b981' }
-                  ]}
-                />
-                {/* Changed to Event Count metrics */}
-                <Bar dataKey="proceeding" name="Proceeding Events" fill="#10b981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="count" name="Total Events" fill="#6366f1" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          {/* Supply Trend Chart */}
+          <ChartCard title={t.supplyByDate}>
+            <SupplyChart data={analytics.byDate} t={t} />
           </ChartCard>
 
           {/* Organizer Event Top */}
           <ChartCard title={t.supplyByStadium}>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={analytics.byStadium.map(item => ({ ...item, stadium: translateContent(item.stadium) }))} layout="vertical" margin={{ top: 20, right: 30, left: 40, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" horizontal={true} vertical={false} />
-                <XAxis type="number" stroke="#888" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis dataKey="stadium" type="category" width={100} stroke="#888" fontSize={11} tickLine={false} axisLine={false} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#171717', border: '1px solid #333', borderRadius: '8px' }}
-                  itemStyle={{ color: '#e5e5e5' }}
-                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                />
-                <Bar dataKey="count" name="Events" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <OrganizerChart
+              data={analytics.byStadium.map(item => ({
+                ...item,
+                stadium: translateContent(item.stadium)
+              }))}
+            />
           </ChartCard>
         </div>
 
@@ -531,26 +560,3 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ label, value, icon, subtext }: { label: string, value: number | string, icon: React.ReactNode, subtext: string }) {
-  return (
-    <div className="bg-neutral-900/50 border border-neutral-800 p-6 rounded-xl backdrop-blur-sm group hover:border-neutral-700 transition-colors">
-      <div className="flex justify-between items-start mb-4">
-        <div className="p-2 bg-neutral-800 rounded-lg group-hover:bg-neutral-700 transition-colors">
-          {icon}
-        </div>
-      </div>
-      <div className="text-3xl font-bold text-white mb-1">{value}</div>
-      <div className="text-sm font-medium text-neutral-400">{label}</div>
-      <div className="text-xs text-neutral-500 mt-2">{subtext}</div>
-    </div>
-  );
-}
-
-function ChartCard({ title, children }: { title: string, children: React.ReactNode }) {
-  return (
-    <div className="bg-neutral-900/50 border border-neutral-800 p-6 rounded-xl backdrop-blur-sm">
-      <h3 className="text-lg font-semibold text-white mb-6">{title}</h3>
-      {children}
-    </div>
-  );
-}
