@@ -190,7 +190,7 @@ export default function UploadPage() {
 
     // Analytics Logic (Reused)
     const uniqueRegions = useMemo(() => {
-        const regions = new Set(events.map(e => e.region).filter(Boolean));
+        const regions = new Set(events.map(e => e.region).filter((r): r is string => !!r));
         return Array.from(regions);
     }, [events]);
 
