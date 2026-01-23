@@ -358,6 +358,24 @@ export default function Dashboard() {
     let totalBooked = 0;
     let proceedingCount = 0;
 
+    // Filter events based on Period (1, 7, 15) for Charts
+    // The 'filteredEvents' already contains the correct date range event list.
+    // However, for the chart X-axis, we want to ensure we show all dates in the range, even with 0 data.
+
+    // Generate full date range keys
+    const dateKeys = new Set<string>();
+    if (period > 1) {
+      const today = new Date();
+      for (let i = 0; i < period; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+        // Format: "1.22(Wed)" to match crawler format if possible, 
+        // BUT crawler returns "YYYY-MM-DD" in isoDate. Use isoDate for sorting.
+        // Actually, `byDateMap` uses `dateKey`.
+        // Let's use `isoDate` for map keys to be safe, then format for display.
+      }
+    }
+
     filteredEvents.forEach(event => {
       // If period is 1, we want hourly aggregation. Use `time`.
       // If period > 1, we want daily aggregation. Use `date`.
@@ -389,19 +407,53 @@ export default function Dashboard() {
       }
     });
 
-    const byDate = Array.from(byDateMap.entries()).map(([date, data]) => ({
-      date: period === 1 ? date : date.substring(5), // Keep full time for 1-day, remove year for others
-      fullDate: date,
-      ...data
-    })).sort((a, b) => period === 1 ? a.fullDate.localeCompare(b.fullDate) : a.fullDate.localeCompare(b.fullDate));
+    // Fill missing dates with 0 for Charts (Only for Period > 1)
+    if (period > 1) {
+      const today = new Date();
+      for (let i = 0; i < period; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+        const iso = d.toISOString().substring(0, 10);
+
+        // We need to match the key used above. 
+        // Above uses `event.isoDate` matching `iso`.
+        if (!byDateMap.has(iso)) {
+          byDateMap.set(iso, { supply: 0, booked: 0, count: 0, proceeding: 0 });
+        }
+      }
+    }
+
+    const byDate = Array.from(byDateMap.entries()).map(([key, data]) => {
+      // key is isoDate (YYYY-MM-DD) for period > 1
+      // key is time (HH:MM) for period = 1
+      let dateLabel = key;
+      if (period > 1) {
+        // Convert YYYY-MM-DD to "MM-DD"
+        dateLabel = key.substring(5);
+      }
+
+      return {
+        date: dateLabel,
+        fullDate: key,
+        ...data
+      };
+    }).sort((a, b) => {
+      if (period === 1) return a.fullDate.localeCompare(b.fullDate);
+      return a.fullDate.localeCompare(b.fullDate);
+    });
+
+    // Explicitly slice to exactly 'period' length if we generated extra keys? 
+    // No, loop above generates exactly 'period' days.
+    // However, if we have old data in DB that is not in range, `filteredEvents` already excludes it.
+    // So `byDate` should be correct length.
 
     const byStadium = Array.from(byStadiumMap.entries()).map(([stadium, data]) => ({
       stadium,
       ...data
-    })).sort((a, b) => b.count - a.count).slice(0, 10); // Sort by Event Count (Metric Update)
+    })).sort((a, b) => b.count - a.count).slice(0, 10);
 
     return {
-      byDate,
+      byDate, // Will contain 15 items for 15-day period
       byStadium,
       totalEvents: filteredEvents.length,
       totalCapacity,

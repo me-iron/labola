@@ -56,7 +56,7 @@ async function crawlDate(dateStr: string): Promise<Event[]> {
   const dateEvents: Event[] = [];
 
   while (keepFetching) {
-    if (page > 10) break; // Safety limit
+    if (page > 50) break; // Increased safety limit (10 was too low, capping at 200 items)
 
     const url = `${BASE_URL}&hold_on=${dateStr}&page=${page}`;
 
