@@ -198,20 +198,44 @@ export default function Dashboard() {
   const updateData = async () => {
     setLoading(true);
     try {
-      // Always fetch 30 days from today to ensure DB consistency
-      const daysToFetch = 30;
-      const startDate = new Date().toISOString().substring(0, 10);
+      // Split 30 days into smaller chunks (e.g. 5 days) to avoid Vercel 10s Timeout
+      const totalDays = 30;
+      const daysPerChunk = 5;
+      const chunks = Math.ceil(totalDays / daysPerChunk);
+      const baseDate = new Date();
 
-      // Trigger Crawl (Write to DB)
-      const res = await fetch(`/api/crawl?days=${daysToFetch}&startDate=${startDate}`);
-      const data = await res.json();
+      let successCount = 0;
 
-      if (data.success) {
+      for (let i = 0; i < chunks; i++) {
+        const offset = i * daysPerChunk;
+
+        // Calculate startDate for this chunk
+        // Chunk 0: Today to Today+4
+        // Chunk 1: Today+5 to Today+9
+        const chunkStartDate = new Date(baseDate);
+        chunkStartDate.setDate(baseDate.getDate() + offset);
+        const chunkStartDateStr = chunkStartDate.toISOString().substring(0, 10);
+
+        console.log(`Updating chunk ${i + 1}/${chunks}: ${chunkStartDateStr} for ${daysPerChunk} days`);
+
+        const res = await fetch(`/api/crawl?days=${daysPerChunk}&startDate=${chunkStartDateStr}`);
+        const data = await res.json();
+
+        if (data.success) {
+          successCount++;
+        } else {
+          console.warn(`Chunk ${i + 1} failed:`, data.error);
+        }
+      }
+
+      if (successCount > 0) {
         setLastUpdated(new Date().toLocaleTimeString());
-        // After crawl, re-fetch from DB to see new data
         await fetchEvents();
+        if (successCount < chunks) {
+          alert(`Updated partial data (${successCount}/${chunks} batches). Check console for details.`);
+        }
       } else {
-        alert('Update failed: ' + (data.error || 'Unknown error'));
+        alert('Update failed for all batches. Check console.');
       }
     } catch (error) {
       console.error('Failed to update data', error);
