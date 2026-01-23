@@ -258,7 +258,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchEvents();
-  }, [period]);
+  }, [period, selectedDate]);
 
   const translateStatus = (originalStatus: string) => {
     if (lang === 'ja') return originalStatus;
@@ -304,13 +304,28 @@ export default function Dashboard() {
   }, [events]);
 
   const filteredEvents = React.useMemo(() => {
-    if (selectedRegion === 'all' || !selectedRegion) return events;
     return events.filter(e => {
-      if (e.region) return e.region === selectedRegion;
-      // Fallback
-      return e.address.startsWith(selectedRegion);
+      // 1. Region Filter
+      let matchesRegion = true;
+      if (selectedRegion !== 'all') {
+        if (e.region) matchesRegion = e.region === selectedRegion;
+        else matchesRegion = e.address.startsWith(selectedRegion);
+      }
+      if (!matchesRegion) return false;
+
+      // 2. Date Filter
+      const eventDate = e.isoDate || e.date;
+      if (period === 1) {
+        return eventDate === selectedDate;
+      } else {
+        const today = new Date().toISOString().substring(0, 10);
+        const endDate = new Date();
+        endDate.setDate(new Date().getDate() + period - 1);
+        const endDateStr = endDate.toISOString().substring(0, 10);
+        return eventDate >= today && eventDate <= endDateStr;
+      }
     });
-  }, [events, selectedRegion]);
+  }, [events, selectedRegion, period, selectedDate]);
 
   const analytics = React.useMemo((): AnalyticsData => {
     const byDateMap = new Map<string, { supply: number; booked: number; count: number; proceeding: number }>();

@@ -29,7 +29,8 @@ export async function crawlLaBOLA(startDate: string, days: number): Promise<Even
   console.log(`Starting crawl from ${startDate} for ${days} days (Parallel)...`);
 
   // Simple concurrency control
-  const CONCURRENCY = 30;
+  // Reduced to 5 to prevent Vercel Function Timeouts (10s limit on Hobby tier)
+  const CONCURRENCY = 5;
   const results: Event[] = [];
 
   for (let i = 0; i < datesToCrawl.length; i += CONCURRENCY) {
