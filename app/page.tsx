@@ -201,14 +201,13 @@ export default function Dashboard() {
     setLoading(true);
     try {
       // Strategy: Fetch 1 day at a time to strictly avoid Vercel 10s Timeout
-      // (Since we increased page limit to 50, a single day can take time)
-      const totalDays = 30; // User wants 30 days data
+      const totalDays = 30;
       const daysPerChunk = 1;
       const chunks = Math.ceil(totalDays / daysPerChunk);
       const baseDate = new Date();
 
       let successCount = 0;
-      let firstError = '';
+      let failedDates: string[] = [];
 
       for (let i = 0; i < chunks; i++) {
         const offset = i * daysPerChunk;
@@ -219,32 +218,41 @@ export default function Dashboard() {
 
         console.log(`Updating chunk ${i + 1}/${chunks}: ${chunkStartDateStr}`);
 
-        try {
-          const res = await fetch(`/api/crawl?days=${daysPerChunk}&startDate=${chunkStartDateStr}`);
-          const data = await res.json();
+        // Retry logic: up to 3 attempts per chunk
+        let success = false;
+        for (let attempt = 1; attempt <= 3 && !success; attempt++) {
+          try {
+            const res = await fetch(`/api/crawl?days=${daysPerChunk}&startDate=${chunkStartDateStr}`);
+            const data = await res.json();
 
-          if (data.success) {
-            successCount++;
-          } else {
-            console.warn(`Chunk ${i + 1} failed:`, data.error);
-            if (!firstError) firstError = data.error;
+            if (data.success) {
+              success = true;
+              successCount++;
+            } else {
+              console.warn(`Chunk ${i + 1} attempt ${attempt} failed:`, data.error);
+              if (attempt < 3) await new Promise(r => setTimeout(r, 500)); // Wait 500ms before retry
+            }
+          } catch (fetchErr: any) {
+            console.error(`Network error on chunk ${i + 1} attempt ${attempt}:`, fetchErr);
+            if (attempt < 3) await new Promise(r => setTimeout(r, 500));
           }
-        } catch (fetchErr: any) {
-          console.error(`Network error on chunk ${i + 1}:`, fetchErr);
-          if (!firstError) firstError = fetchErr.message || 'Network Error';
+        }
+
+        if (!success) {
+          failedDates.push(chunkStartDateStr);
         }
       }
 
       if (successCount > 0) {
         setLastUpdated(new Date().toLocaleTimeString());
         await fetchEvents();
-        if (successCount < chunks) {
-          alert(`부분 완료: ${successCount}/${chunks}일 데이터 업데이트됨.\n실패 사유: ${firstError}`);
+        if (failedDates.length > 0) {
+          alert(`완료: ${successCount}/${chunks}일 성공\n실패한 날짜: ${failedDates.join(', ')}`);
         } else {
-          console.log('All chunks updated successfully');
+          console.log('All 30 days updated successfully');
         }
       } else {
-        alert(`업데이트 실패: ${firstError || '모든 요청 실패'}`);
+        alert(`업데이트 실패: 모든 요청 실패`);
       }
     } catch (error) {
       console.error('Failed to update data', error);
