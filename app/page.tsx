@@ -36,7 +36,7 @@ interface AnalyticsData {
 }
 
 type Lang = 'ko' | 'ja';
-type Period = 1 | 7 | 30;
+type Period = 1 | 7 | 30; // Reverted to 30 days as requested
 
 // Simple keyword dictionary for dynamic content translation
 // Prefecture Map for Phonetic Transliteration (User Request)
@@ -118,7 +118,7 @@ const DICT = {
     spots: '인원',
     period1: '1일',
     period7: '7일',
-    period30: '30일',
+    period30: '30일', // Reverted label
     language: '언어',
     statusMap: {
       '受付け中': '접수중',
@@ -152,7 +152,7 @@ const DICT = {
     spots: 'Spots',
     period1: '1 Day',
     period7: '7 Days',
-    period30: '30 Days',
+    period30: '30 Days', // Reverted label
     language: 'Language',
     statusMap: {} as Record<string, string>,
     noData: 'No data available. Click "Update Data" to fetch.',
@@ -172,6 +172,8 @@ export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().substring(0, 10));
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 20;
 
   const t = DICT[lang];
 
@@ -198,33 +200,38 @@ export default function Dashboard() {
   const updateData = async () => {
     setLoading(true);
     try {
-      // Split 30 days into smaller chunks (e.g. 5 days) to avoid Vercel 10s Timeout
-      const totalDays = 30;
-      const daysPerChunk = 5;
+      // Strategy: Fetch 1 day at a time to strictly avoid Vercel 10s Timeout
+      // (Since we increased page limit to 50, a single day can take time)
+      const totalDays = 30; // User wants 30 days data
+      const daysPerChunk = 1;
       const chunks = Math.ceil(totalDays / daysPerChunk);
       const baseDate = new Date();
 
       let successCount = 0;
+      let firstError = '';
 
       for (let i = 0; i < chunks; i++) {
         const offset = i * daysPerChunk;
 
-        // Calculate startDate for this chunk
-        // Chunk 0: Today to Today+4
-        // Chunk 1: Today+5 to Today+9
         const chunkStartDate = new Date(baseDate);
         chunkStartDate.setDate(baseDate.getDate() + offset);
         const chunkStartDateStr = chunkStartDate.toISOString().substring(0, 10);
 
-        console.log(`Updating chunk ${i + 1}/${chunks}: ${chunkStartDateStr} for ${daysPerChunk} days`);
+        console.log(`Updating chunk ${i + 1}/${chunks}: ${chunkStartDateStr}`);
 
-        const res = await fetch(`/api/crawl?days=${daysPerChunk}&startDate=${chunkStartDateStr}`);
-        const data = await res.json();
+        try {
+          const res = await fetch(`/api/crawl?days=${daysPerChunk}&startDate=${chunkStartDateStr}`);
+          const data = await res.json();
 
-        if (data.success) {
-          successCount++;
-        } else {
-          console.warn(`Chunk ${i + 1} failed:`, data.error);
+          if (data.success) {
+            successCount++;
+          } else {
+            console.warn(`Chunk ${i + 1} failed:`, data.error);
+            if (!firstError) firstError = data.error;
+          }
+        } catch (fetchErr: any) {
+          console.error(`Network error on chunk ${i + 1}:`, fetchErr);
+          if (!firstError) firstError = fetchErr.message || 'Network Error';
         }
       }
 
@@ -232,14 +239,16 @@ export default function Dashboard() {
         setLastUpdated(new Date().toLocaleTimeString());
         await fetchEvents();
         if (successCount < chunks) {
-          alert(`Updated partial data (${successCount}/${chunks} batches). Check console for details.`);
+          alert(`부분 완료: ${successCount}/${chunks}일 데이터 업데이트됨.\n실패 사유: ${firstError}`);
+        } else {
+          console.log('All chunks updated successfully');
         }
       } else {
-        alert('Update failed for all batches. Check console.');
+        alert(`업데이트 실패: ${firstError || '모든 요청 실패'}`);
       }
     } catch (error) {
       console.error('Failed to update data', error);
-      alert('Failed to update data. Check console.');
+      alert('치명적 오류 발생. 콘솔을 확인하세요.');
     } finally {
       setLoading(false);
     }
@@ -283,6 +292,11 @@ export default function Dashboard() {
   useEffect(() => {
     fetchEvents();
   }, [period, selectedDate]);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [period, selectedDate, selectedRegion, events]);
 
   const translateStatus = (originalStatus: string) => {
     if (lang === 'ja') return originalStatus;
@@ -612,7 +626,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800">
-                {filteredEvents.map((event) => (
+                {filteredEvents.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((event) => (
                   <tr key={event.id} className="hover:bg-neutral-800/50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap text-white">{event.isoDate || event.date}</td>
                     <td className="px-6 py-4 whitespace-nowrap">{event.time}</td>
@@ -640,12 +654,40 @@ export default function Dashboard() {
               </tbody>
             </table>
           </div>
-          {filteredEvents.length === 0 && !loading && (
-            <div className="p-12 text-center text-neutral-500">
-              {t.noData}
-            </div>
-          )}
         </div>
+        {filteredEvents.length === 0 && !loading && (
+          <div className="p-8 text-center text-neutral-500">
+            {t.noData}
+          </div>
+        )}
+
+        {/* Pagination Controls */}
+        {filteredEvents.length > 0 && (
+          <div className="border-t border-neutral-800 p-4 flex items-center justify-between">
+            <span className="text-sm text-neutral-400">
+              Showing {Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, filteredEvents.length)} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredEvents.length)} of {filteredEvents.length}
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-sm bg-neutral-800 rounded disabled:opacity-50 hover:bg-neutral-700 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <span className="px-2 py-1 text-sm text-neutral-400 self-center">
+                Page {currentPage} / {Math.max(1, Math.ceil(filteredEvents.length / ITEMS_PER_PAGE))}
+              </span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredEvents.length / ITEMS_PER_PAGE), p + 1))}
+                disabled={currentPage >= Math.ceil(filteredEvents.length / ITEMS_PER_PAGE)}
+                className="px-3 py-1 text-sm bg-neutral-800 rounded disabled:opacity-50 hover:bg-neutral-700 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

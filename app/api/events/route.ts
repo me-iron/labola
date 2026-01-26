@@ -13,7 +13,8 @@ export async function GET(request: Request) {
         .from('match')
         .select('*')
         .gte('iso_date', startDate)
-        .order('iso_date', { ascending: true });
+        .order('iso_date', { ascending: true })
+        .range(0, 9999);
 
     if (error) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
