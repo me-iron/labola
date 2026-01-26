@@ -594,7 +594,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Supply Trend Chart */}
           <ChartCard title={t.supplyByDate}>
-            <SupplyChart data={analytics.byDate} t={t} />
+            <SupplyChart data={analytics.byDate} t={t} scrollable={period === 30} />
           </ChartCard>
 
           {/* Organizer Event Top */}
