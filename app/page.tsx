@@ -197,66 +197,28 @@ export default function Dashboard() {
     }
   };
 
-  const updateData = async () => {
+  const quickUpdate = async (days: number) => {
     setLoading(true);
     try {
-      // Strategy: Fetch 1 day at a time to strictly avoid Vercel 10s Timeout
-      const totalDays = 30;
-      const daysPerChunk = 1;
-      const chunks = Math.ceil(totalDays / daysPerChunk);
-      const baseDate = new Date();
+      const startDate = new Date().toISOString().substring(0, 10);
+      console.log(`Quick update: ${days} days starting from ${startDate}`);
 
-      let successCount = 0;
-      let failedDates: string[] = [];
+      const res = await fetch(`/api/crawl?startDate=${startDate}&days=${days}&clean=true`);
+      const data = await res.json();
 
-      for (let i = 0; i < chunks; i++) {
-        const offset = i * daysPerChunk;
-
-        const chunkStartDate = new Date(baseDate);
-        chunkStartDate.setDate(baseDate.getDate() + offset);
-        const chunkStartDateStr = chunkStartDate.toISOString().substring(0, 10);
-
-        console.log(`Updating chunk ${i + 1}/${chunks}: ${chunkStartDateStr}`);
-
-        // Retry logic: up to 3 attempts per chunk
-        let success = false;
-        for (let attempt = 1; attempt <= 3 && !success; attempt++) {
-          try {
-            const res = await fetch(`/api/crawl?days=${daysPerChunk}&startDate=${chunkStartDateStr}`);
-            const data = await res.json();
-
-            if (data.success) {
-              success = true;
-              successCount++;
-            } else {
-              console.warn(`Chunk ${i + 1} attempt ${attempt} failed:`, data.error);
-              if (attempt < 3) await new Promise(r => setTimeout(r, 500)); // Wait 500ms before retry
-            }
-          } catch (fetchErr: any) {
-            console.error(`Network error on chunk ${i + 1} attempt ${attempt}:`, fetchErr);
-            if (attempt < 3) await new Promise(r => setTimeout(r, 500));
-          }
-        }
-
-        if (!success) {
-          failedDates.push(chunkStartDateStr);
-        }
-      }
-
-      if (successCount > 0) {
+      if (data.success) {
         setLastUpdated(new Date().toLocaleTimeString());
         await fetchEvents();
-        if (failedDates.length > 0) {
-          alert(`완료: ${successCount}/${chunks}일 성공\n실패한 날짜: ${failedDates.join(', ')}`);
-        } else {
-          console.log('All 30 days updated successfully');
-        }
+        const msg = lang === 'ko'
+          ? `업데이트 완료: ${data.count}개 이벤트 (${days}일)`
+          : `Update complete: ${data.count} events (${days} days)`;
+        alert(msg);
       } else {
-        alert(`업데이트 실패: 모든 요청 실패`);
+        alert('Update failed: ' + (data.error || 'Unknown error'));
       }
     } catch (error) {
-      console.error('Failed to update data', error);
-      alert('치명적 오류 발생. 콘솔을 확인하세요.');
+      console.error('Quick update failed:', error);
+      alert(lang === 'ko' ? '업데이트 실패' : 'Update failed');
     } finally {
       setLoading(false);
     }
@@ -598,18 +560,46 @@ export default function Dashboard() {
               {lang === 'ko' ? '정리' : 'Cleanup'}
             </button>
 
-            <button
-              onClick={() => updateData()}
-              disabled={loading}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-200",
-                "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed",
-                "shadow-[0_0_15px_rgba(79,70,229,0.3)] hover:shadow-[0_0_25px_rgba(79,70,229,0.5)]"
-              )}
-            >
-              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-              {loading ? t.updating : t.updateData}
-            </button>
+            <div className="flex items-center gap-1 bg-neutral-900 rounded-lg p-1 border border-neutral-800">
+              <span className="text-xs text-neutral-500 px-2">{lang === 'ko' ? '업데이트' : 'Update'}</span>
+              <button
+                onClick={() => quickUpdate(1)}
+                disabled={loading}
+                title={lang === 'ko' ? '오늘 데이터만 새로고침' : 'Refresh today only'}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+                  "bg-emerald-600 hover:bg-emerald-500 text-white",
+                  "disabled:opacity-50 disabled:cursor-not-allowed"
+                )}
+              >
+                <RefreshCw className={cn("w-3 h-3 inline mr-1", loading && "animate-spin")} />
+                1{lang === 'ko' ? '일' : 'D'}
+              </button>
+              <button
+                onClick={() => quickUpdate(7)}
+                disabled={loading}
+                title={lang === 'ko' ? '7일간 데이터 새로고침' : 'Refresh 7 days'}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+                  "bg-blue-600 hover:bg-blue-500 text-white",
+                  "disabled:opacity-50 disabled:cursor-not-allowed"
+                )}
+              >
+                7{lang === 'ko' ? '일' : 'D'}
+              </button>
+              <button
+                onClick={() => quickUpdate(14)}
+                disabled={loading}
+                title={lang === 'ko' ? '14일간 데이터 새로고침' : 'Refresh 14 days'}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+                  "bg-indigo-600 hover:bg-indigo-500 text-white",
+                  "disabled:opacity-50 disabled:cursor-not-allowed"
+                )}
+              >
+                14{lang === 'ko' ? '일' : 'D'}
+              </button>
+            </div>
           </div>
         </div>
 
