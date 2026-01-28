@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import Link from 'next/link';
-import { RefreshCw, MapPin, Calendar, Users, AlertCircle, TrendingUp, Download, Upload } from 'lucide-react';
+import { RefreshCw, MapPin, Calendar, Users, AlertCircle, TrendingUp, Download, Upload, Trash2 } from 'lucide-react';
 import { transliterate } from '@/lib/transliterate';
 import { StatCard } from '@/components/StatCard';
 import { ChartCard } from '@/components/ChartCard';
@@ -257,6 +257,34 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Failed to update data', error);
       alert('치명적 오류 발생. 콘솔을 확인하세요.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cleanupData = async () => {
+    if (period !== 1) {
+      alert(lang === 'ko' ? '1일 모드에서만 정리가 가능합니다.' : 'Cleanup is only available in 1-day mode.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/cleanup?date=${selectedDate}`);
+      const data = await res.json();
+
+      if (data.success) {
+        const msg = lang === 'ko'
+          ? `정리 완료: ${data.deletedCount}개 삭제됨 (총 ${data.checked}개 확인)`
+          : `Cleanup complete: ${data.deletedCount} deleted (${data.checked} checked)`;
+        alert(msg);
+        await fetchEvents();
+      } else {
+        alert('Cleanup failed: ' + (data.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Cleanup failed:', error);
+      alert('Cleanup failed');
     } finally {
       setLoading(false);
     }
@@ -553,6 +581,21 @@ export default function Dashboard() {
             >
               <Download className="w-4 h-4" />
               CSV
+            </button>
+
+            <button
+              onClick={cleanupData}
+              disabled={loading || period !== 1}
+              title={period !== 1 ? (lang === 'ko' ? '1일 모드에서만 사용 가능' : 'Only available in 1-day mode') : (lang === 'ko' ? '삭제된 이벤트 정리' : 'Cleanup deleted events')}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-200",
+                "bg-red-900/50 hover:bg-red-800/70 active:bg-red-700/80 border border-red-800/50",
+                "text-red-300 hover:text-red-100",
+                "disabled:opacity-40 disabled:cursor-not-allowed"
+              )}
+            >
+              <Trash2 className="w-4 h-4" />
+              {lang === 'ko' ? '정리' : 'Cleanup'}
             </button>
 
             <button
