@@ -167,6 +167,7 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 export default function Dashboard() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingDays, setLoadingDays] = useState<number | null>(null);
   const [lang, setLang] = useState<Lang>('ko');
   const [period, setPeriod] = useState<Period>(1);
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().substring(0, 10));
@@ -199,6 +200,7 @@ export default function Dashboard() {
 
   const quickUpdate = async (days: number) => {
     setLoading(true);
+    setLoadingDays(days);
     try {
       const startDate = new Date().toISOString().substring(0, 10);
       console.log(`Quick update: ${days} days starting from ${startDate}`);
@@ -221,6 +223,7 @@ export default function Dashboard() {
       alert(lang === 'ko' ? '업데이트 실패' : 'Update failed');
     } finally {
       setLoading(false);
+      setLoadingDays(null);
     }
   };
 
@@ -567,12 +570,12 @@ export default function Dashboard() {
                 disabled={loading}
                 title={lang === 'ko' ? '오늘 데이터만 새로고침' : 'Refresh today only'}
                 className={cn(
-                  "px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+                  "w-14 px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-1",
                   "bg-emerald-600 hover:bg-emerald-500 text-white",
                   "disabled:opacity-50 disabled:cursor-not-allowed"
                 )}
               >
-                <RefreshCw className={cn("w-3 h-3 inline mr-1", loading && "animate-spin")} />
+                {loadingDays === 1 && <RefreshCw className="w-3 h-3 animate-spin" />}
                 1{lang === 'ko' ? '일' : 'D'}
               </button>
               <button
@@ -580,11 +583,12 @@ export default function Dashboard() {
                 disabled={loading}
                 title={lang === 'ko' ? '7일간 데이터 새로고침' : 'Refresh 7 days'}
                 className={cn(
-                  "px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+                  "w-14 px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-1",
                   "bg-blue-600 hover:bg-blue-500 text-white",
                   "disabled:opacity-50 disabled:cursor-not-allowed"
                 )}
               >
+                {loadingDays === 7 && <RefreshCw className="w-3 h-3 animate-spin" />}
                 7{lang === 'ko' ? '일' : 'D'}
               </button>
               <button
@@ -592,11 +596,12 @@ export default function Dashboard() {
                 disabled={loading}
                 title={lang === 'ko' ? '14일간 데이터 새로고침' : 'Refresh 14 days'}
                 className={cn(
-                  "px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+                  "w-16 px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-1",
                   "bg-indigo-600 hover:bg-indigo-500 text-white",
                   "disabled:opacity-50 disabled:cursor-not-allowed"
                 )}
               >
+                {loadingDays === 14 && <RefreshCw className="w-3 h-3 animate-spin" />}
                 14{lang === 'ko' ? '일' : 'D'}
               </button>
             </div>
