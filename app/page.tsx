@@ -34,6 +34,7 @@ interface AnalyticsData {
   totalCapacity: number;
   totalBooked: number;
   proceedingCount: number;
+  totalOrganizers: number;
 }
 
 type Lang = 'ko' | 'ja';
@@ -539,7 +540,8 @@ export default function Dashboard() {
       totalEvents: filteredEvents.length,
       totalCapacity,
       totalBooked,
-      proceedingCount
+      proceedingCount,
+      totalOrganizers: byStadiumMap.size
     };
   }, [filteredEvents, period]);
 
@@ -675,11 +677,17 @@ export default function Dashboard() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
           <StatCard
             label={t.totalEvents}
             value={analytics.totalEvents}
             icon={<MapPin className="w-5 h-5 text-emerald-400" />}
+            subtext={`${period === 1 ? 'Selected Date' : period + ' Days'}`}
+          />
+          <StatCard
+            label={lang === 'ko' ? '총 주최자' : 'Organizers'}
+            value={analytics.totalOrganizers}
+            icon={<Users className="w-5 h-5 text-cyan-400" />}
             subtext={`${period === 1 ? 'Selected Date' : period + ' Days'}`}
           />
           <StatCard
