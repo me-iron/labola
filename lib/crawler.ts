@@ -7,6 +7,7 @@ export interface Event {
   date: string;
   isoDate: string;
   time: string;
+  startTime: string;  // Sortable start time (e.g. "10:00")
   title: string;
   stadium: string;
   address: string;
@@ -104,11 +105,15 @@ async function crawlDate(dateStr: string): Promise<Event[]> {
         const regionMatch = address.match(/^(.+?[都道府県])/);
         const region = regionMatch ? regionMatch[0] : null;
 
+        // Extract start time from time range (e.g. "10:00-12:00" -> "10:00")
+        const startTime = time.split('-')[0]?.trim() || time;
+
         dateEvents.push({
           id: eventId,
           date: `${dateDay} (${dateWeek})`,
           isoDate: dateStr,
           time,
+          startTime,
           title,
           stadium: organizerText,
           address,

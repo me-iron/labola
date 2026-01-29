@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import Link from 'next/link';
-import { RefreshCw, MapPin, Calendar, Users, AlertCircle, TrendingUp, Download, Upload, Trash2 } from 'lucide-react';
+import { RefreshCw, MapPin, Calendar, Users, AlertCircle, TrendingUp, Download, Upload, Trash2, Search, ChevronUp, ChevronDown, Filter } from 'lucide-react';
 import { transliterate } from '@/lib/transliterate';
 import { StatCard } from '@/components/StatCard';
 import { ChartCard } from '@/components/ChartCard';
@@ -16,6 +16,7 @@ interface Event {
   date: string;
   isoDate: string;
   time: string;
+  startTime?: string;
   title: string;
   stadium: string;
   address: string;
@@ -164,6 +165,9 @@ function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
 }
 
+type SortField = 'date' | 'time' | 'stadium' | 'status';
+type SortDirection = 'asc' | 'desc';
+
 export default function Dashboard() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(false);
@@ -175,6 +179,12 @@ export default function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 20;
+
+  // Sorting & Filtering State
+  const [sortField, setSortField] = useState<SortField>('date');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
 
   const t = DICT[lang];
 
@@ -342,8 +352,17 @@ export default function Dashboard() {
     return Array.from(set).sort();
   }, [events]);
 
+  // Unique statuses for filter dropdown
+  const uniqueStatuses = React.useMemo(() => {
+    const set = new Set<string>();
+    events.forEach(e => {
+      if (e.status) set.add(e.status);
+    });
+    return Array.from(set).sort();
+  }, [events]);
+
   const filteredEvents = React.useMemo(() => {
-    return events.filter(e => {
+    let result = events.filter(e => {
       // 1. Region Filter
       let matchesRegion = true;
       if (selectedRegion !== 'all') {
@@ -355,16 +374,62 @@ export default function Dashboard() {
       // 2. Date Filter
       const eventDate = e.isoDate || e.date;
       if (period === 1) {
-        return eventDate === selectedDate;
+        if (eventDate !== selectedDate) return false;
       } else {
         const today = new Date().toISOString().substring(0, 10);
         const endDate = new Date();
         endDate.setDate(new Date().getDate() + period - 1);
         const endDateStr = endDate.toISOString().substring(0, 10);
-        return eventDate >= today && eventDate <= endDateStr;
+        if (!(eventDate >= today && eventDate <= endDateStr)) return false;
       }
+
+      // 3. Keyword Search (title, stadium)
+      if (searchKeyword.trim()) {
+        const keyword = searchKeyword.toLowerCase();
+        const matchesKeyword =
+          e.title.toLowerCase().includes(keyword) ||
+          e.stadium.toLowerCase().includes(keyword) ||
+          translateContent(e.title).toLowerCase().includes(keyword) ||
+          translateContent(e.stadium).toLowerCase().includes(keyword);
+        if (!matchesKeyword) return false;
+      }
+
+      // 4. Status Filter
+      if (selectedStatuses.length > 0) {
+        if (!selectedStatuses.includes(e.status)) return false;
+      }
+
+      return true;
     });
-  }, [events, selectedRegion, period, selectedDate]);
+
+    // Sorting
+    result = [...result].sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'date':
+          const dateA = a.isoDate || a.date;
+          const dateB = b.isoDate || b.date;
+          comparison = dateA.localeCompare(dateB);
+          if (comparison === 0) {
+            // Secondary sort by start time
+            comparison = (a.startTime || a.time).localeCompare(b.startTime || b.time);
+          }
+          break;
+        case 'time':
+          comparison = (a.startTime || a.time).localeCompare(b.startTime || b.time);
+          break;
+        case 'stadium':
+          comparison = a.stadium.localeCompare(b.stadium);
+          break;
+        case 'status':
+          comparison = a.status.localeCompare(b.status);
+          break;
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [events, selectedRegion, period, selectedDate, searchKeyword, selectedStatuses, sortField, sortDirection]);
 
   const analytics = React.useMemo((): AnalyticsData => {
     const byDateMap = new Map<string, { supply: number; booked: number; count: number; proceeding: number }>();
@@ -657,17 +722,119 @@ export default function Dashboard() {
         {/* Recent Events Table */}
         <div className="bg-neutral-900/50 border border-neutral-800 rounded-xl overflow-hidden backdrop-blur-sm">
           <div className="p-6 border-b border-neutral-800">
-            <h3 className="text-lg font-semibold text-white">{t.recentEvents}</h3>
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+              <h3 className="text-lg font-semibold text-white">{t.recentEvents}</h3>
+
+              {/* Search & Filter Controls */}
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Keyword Search */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+                  <input
+                    type="text"
+                    value={searchKeyword}
+                    onChange={(e) => { setSearchKeyword(e.target.value); setCurrentPage(1); }}
+                    placeholder={lang === 'ko' ? '제목, 주최자 검색...' : 'Search title, organizer...'}
+                    className="bg-neutral-800 border border-neutral-700 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-indigo-500 w-56"
+                  />
+                </div>
+
+                {/* Status Filter Dropdown */}
+                <div className="relative group">
+                  <button className="flex items-center gap-2 bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2 text-sm text-neutral-300 hover:border-neutral-600">
+                    <Filter className="w-4 h-4" />
+                    {lang === 'ko' ? '상태' : 'Status'}
+                    {selectedStatuses.length > 0 && (
+                      <span className="bg-indigo-600 text-white text-xs rounded-full px-1.5">{selectedStatuses.length}</span>
+                    )}
+                  </button>
+                  <div className="absolute right-0 top-full mt-2 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl z-50 min-w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+                    <div className="p-2 max-h-64 overflow-y-auto">
+                      {uniqueStatuses.map(status => (
+                        <label key={status} className="flex items-center gap-2 px-3 py-2 hover:bg-neutral-700 rounded cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedStatuses.includes(status)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedStatuses([...selectedStatuses, status]);
+                              } else {
+                                setSelectedStatuses(selectedStatuses.filter(s => s !== status));
+                              }
+                              setCurrentPage(1);
+                            }}
+                            className="rounded border-neutral-600 bg-neutral-700 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span className="text-sm text-neutral-300">{translateStatus(status)}</span>
+                        </label>
+                      ))}
+                      {selectedStatuses.length > 0 && (
+                        <button
+                          onClick={() => { setSelectedStatuses([]); setCurrentPage(1); }}
+                          className="w-full text-left px-3 py-2 text-xs text-red-400 hover:bg-neutral-700 rounded"
+                        >
+                          {lang === 'ko' ? '필터 초기화' : 'Clear filters'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm text-neutral-400">
               <thead className="bg-neutral-900 uppercase text-xs font-medium tracking-wider text-neutral-500">
                 <tr>
-                  <th className="px-6 py-4">{t.date}</th>
-                  <th className="px-6 py-4">{t.time}</th>
+                  <th
+                    className="px-6 py-4 cursor-pointer hover:text-white transition-colors select-none"
+                    onClick={() => {
+                      if (sortField === 'date') setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                      else { setSortField('date'); setSortDirection('asc'); }
+                    }}
+                  >
+                    <div className="flex items-center gap-1">
+                      {t.date}
+                      {sortField === 'date' && (sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                    </div>
+                  </th>
+                  <th
+                    className="px-6 py-4 cursor-pointer hover:text-white transition-colors select-none"
+                    onClick={() => {
+                      if (sortField === 'time') setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                      else { setSortField('time'); setSortDirection('asc'); }
+                    }}
+                  >
+                    <div className="flex items-center gap-1">
+                      {t.time}
+                      {sortField === 'time' && (sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                    </div>
+                  </th>
                   <th className="px-6 py-4">{t.eventTitle}</th>
-                  <th className="px-6 py-4">{t.organizer}</th>
-                  <th className="px-6 py-4">{t.status}</th>
+                  <th
+                    className="px-6 py-4 cursor-pointer hover:text-white transition-colors select-none"
+                    onClick={() => {
+                      if (sortField === 'stadium') setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                      else { setSortField('stadium'); setSortDirection('asc'); }
+                    }}
+                  >
+                    <div className="flex items-center gap-1">
+                      {t.organizer}
+                      {sortField === 'stadium' && (sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                    </div>
+                  </th>
+                  <th
+                    className="px-6 py-4 cursor-pointer hover:text-white transition-colors select-none"
+                    onClick={() => {
+                      if (sortField === 'status') setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                      else { setSortField('status'); setSortDirection('asc'); }
+                    }}
+                  >
+                    <div className="flex items-center gap-1">
+                      {t.status}
+                      {sortField === 'status' && (sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                    </div>
+                  </th>
                   <th className="px-6 py-4 text-right">{t.spots}</th>
                 </tr>
               </thead>

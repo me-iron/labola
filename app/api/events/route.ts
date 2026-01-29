@@ -23,6 +23,7 @@ export async function GET(request: Request) {
             .select('*')
             .gte('iso_date', startDate)
             .order('iso_date', { ascending: true })
+            .order('start_time', { ascending: true })
             .range(from, to);
 
         if (error) {
@@ -52,6 +53,7 @@ export async function GET(request: Request) {
         date: e.date,
         isoDate: e.iso_date,
         time: e.time,
+        startTime: e.start_time,
         title: e.title,
         stadium: e.stadium,
         address: e.address,

@@ -42,6 +42,7 @@ export async function GET(request: Request) {
             date: e.date,
             iso_date: e.isoDate,
             time: e.time,
+            start_time: e.startTime,
             title: e.title,
             stadium: e.stadium,
             address: e.address,
