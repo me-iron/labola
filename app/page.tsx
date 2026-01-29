@@ -457,9 +457,9 @@ export default function Dashboard() {
     }
 
     filteredEvents.forEach(event => {
-      // If period is 1, we want hourly aggregation. Use `time`.
-      // If period > 1, we want daily aggregation. Use `date`.
-      const dateKey = period === 1 ? event.time : (event.isoDate || event.date);
+      // If period is 1, we want hourly aggregation. Use `startTime` for proper sorting.
+      // If period > 1, we want daily aggregation. Use `isoDate`.
+      const dateKey = period === 1 ? (event.startTime || event.time.split('-')[0]) : (event.isoDate || event.date);
 
       const currentDate = byDateMap.get(dateKey) || { supply: 0, booked: 0, count: 0, proceeding: 0 };
 
@@ -505,7 +505,7 @@ export default function Dashboard() {
 
     const byDate = Array.from(byDateMap.entries()).map(([key, data]) => {
       // key is isoDate (YYYY-MM-DD) for period > 1
-      // key is time (HH:MM) for period = 1
+      // key is startTime (HH:MM) for period = 1
       let dateLabel = key;
       if (period > 1) {
         // Convert YYYY-MM-DD to "MM-DD"
@@ -518,7 +518,8 @@ export default function Dashboard() {
         ...data
       };
     }).sort((a, b) => {
-      if (period === 1) return a.fullDate.localeCompare(b.fullDate);
+      // For period === 1 (time-based), sort by time string which works correctly for HH:MM format
+      // "08:30" < "19:00" in string comparison, which is correct chronological order
       return a.fullDate.localeCompare(b.fullDate);
     });
 
