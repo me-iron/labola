@@ -5,7 +5,6 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import Link from 'next/link';
 import { RefreshCw, MapPin, Calendar, Users, AlertCircle, TrendingUp, Download, Upload, Trash2, Search, ChevronUp, ChevronDown, Filter } from 'lucide-react';
-import { transliterate } from '@/lib/transliterate';
 import { StatCard } from '@/components/StatCard';
 import { ChartCard } from '@/components/ChartCard';
 import { SupplyChart } from '@/components/SupplyChart';
@@ -37,131 +36,24 @@ interface AnalyticsData {
   totalOrganizers: number;
 }
 
-type Lang = 'ko' | 'ja';
-type Period = 1 | 7 | 30; // Reverted to 30 days as requested
+type Period = 1 | 7 | 30;
 
-// Simple keyword dictionary for dynamic content translation
-// Prefecture Map for Phonetic Transliteration (User Request)
-const PREFECTURE_MAP: Record<string, string> = {
-  '北海道': '홋카이도', '青森県': '아오모리현', '岩手県': '이와테현', '宮城県': '미야기현', '秋田県': '아키타현', '山形県': '야마가타현', '福島県': '후쿠시마현',
-  '茨城県': '이바라키현', '栃木県': '도치기현', '群馬県': '군마현', '埼玉県': '사이타마현', '千葉県': '치바현', '東京都': '도쿄도', '神奈川県': '가나가와현',
-  '新潟県': '니이가타현', '富山県': '토야마현', '石川県': '이시카와현', '福井県': '후쿠이현', '山梨県': '야마나시현', '長野県': '나가노현', '岐阜県': '기후현', '静岡県': '시즈오카현', '愛知県': '아이치현',
-  '三重県': '미에현', '滋賀県': '아가현', '京都府': '교토부', '大阪府': '오사카부', '兵庫県': '효고현', '奈良県': '나라현', '和歌山県': '와카야마현',
-  '鳥取県': '돗토리현', '島根県': '시마네현', '岡山県': '오카야마현', '広島県': '히로시마현', '山口県': '야마구치현',
-  '徳島県': '도쿠시마현', '香川県': '카가와현', '愛媛県': '에히메현', '高知県': '코치현',
-  '福岡県': '후쿠오카현', '佐賀県': '사가현', '長崎県': '나가사키현', '熊本県': '구마모토현', '大分県': '오이타현', '宮崎県': '미야자키현', '鹿児島県': '가고시마현', '沖縄県': '오키나와현'
-};
-
-const KEYWORDS: Record<string, string> = {
-  // Stadiums / Organizers
-  'フットサル': '풋살',
-  'スタジアム': '스타디움',
-  'ステージ': '스테이지',
-  '個人参加': '개인참가',
-  '横浜': '요코하마',
-  '新宿': '신주쿠',
-  '日本橋': '니혼바시',
-  '渋谷': '시부야',
-  '池袋': '이케부쿠로',
-  '銀座': '긴자',
-  '西東京': '니시도쿄',
-  '川崎': '카와사키',
-  'アスタ': '아스타',
-  '屋上': '옥상',
-  '室内': '실내',
-  '完全室内': '완전실내',
-  '屋外': '야외',
-
-  // Title / Levels
-  'カテゴリー': '카테고리',
-  'エンジョイ': '엔조이',
-  'ガチ': '진지',
-  'ミックス': '믹스',
-  '初心者': '초심자',
-  '経験者': '경험자',
-  '中級': '중급',
-  '上級': '상급',
-  '初級': '초급',
-  '女性': '여성',
-  '男性': '남성',
-  '中止': '중지',
-  '開催': '개최',
-  '割引': '할인',
-  'キャンペーン': '캠페인',
-  '朝イチ': '아침첫타임',
-  '夜': '밤',
-  '昼': '점심',
-  '個サル': '개인풋살',
-  'コサル': '개인풋살',
-  '募集': '모집',
-  '名': '명'
-};
-
-const DICT = {
-  ko: {
-    title: 'LaBOLA 분석 대시보드',
-    subtitle: '풋살 개인참가 이벤트 분석',
-    updateData: '데이터 업데이트',
-    updating: '업데이트 중...',
-    totalEvents: '총 이벤트',
-    totalCapacity: '총 모집 인원',
-    fillRate: '충원율',
-    proceedingRate: '예상 진행률',
-    supplyByDate: '일별 공급량 예측',
-    supplyByStadium: '주최자별 이벤트 상위',
-    recentEvents: '전체 이벤트',
-    date: '날짜',
-    time: '시간',
-    eventTitle: '제목',
-    organizer: '주최자',
-    stadium: '주최자',
-    region: '지역',
-    status: '상태',
-    spots: '인원',
-    period1: '1일',
-    period7: '7일',
-    period30: '30일', // Reverted label
-    language: '언어',
-    statusMap: {
-      '受付け中': '접수중',
-      'キャンセル待ち': '대기자 모집',
-      '開催中止': '개최취소',
-      '受付け終了': '접수마감',
-      '空いたら通知': '빈자리 알림',
-      '受付け開始前': '접수시작전',
-      '満席': '만석',
-    } as Record<string, string>,
-    noData: '데이터가 없습니다. "데이터 업데이트"를 클릭하세요.',
-    proceedingSubtext: '10명 이상 예약된 이벤트 비율'
-  },
-  ja: {
-    title: 'LaBOLA Analytics',
-    subtitle: 'Futsal Individual Participation Insights',
-    updateData: 'Update Data',
-    updating: 'Updating...',
-    totalEvents: 'Total Events',
-    totalCapacity: 'Total Capacity',
-    fillRate: 'Fill Rate',
-    proceedingRate: 'Est. Proceeding Rate',
-    supplyByDate: 'Supply Forecast by Date',
-    supplyByStadium: 'Top Organizers by Events',
-    recentEvents: 'All Events',
-    date: 'Date',
-    time: 'Time',
-    eventTitle: 'Title',
-    organizer: 'Organizer',
-    stadium: 'Organizer',
-    region: 'Region',
-    status: 'Status',
-    spots: 'Spots',
-    period1: '1 Day',
-    period7: '7 Days',
-    period30: '30 Days', // Reverted label
-    language: 'Language',
-    statusMap: {} as Record<string, string>,
-    noData: 'No data available. Click "Update Data" to fetch.',
-    proceedingSubtext: 'Ratio of events with 10+ booked'
-  }
+// UI Labels (Japanese only - use Chrome translate for other languages)
+const UI = {
+  title: 'LaBOLA Analytics',
+  subtitle: 'フットサル個人参加イベント分析',
+  totalEvents: 'Total Events',
+  totalCapacity: 'Total Capacity',
+  fillRate: 'Fill Rate',
+  proceedingRate: 'Est. Proceeding Rate',
+  supplyByDate: 'Supply Forecast by Date',
+  supplyByStadium: 'Top Organizers by Events',
+  recentEvents: 'All Events',
+  period1: '1 Day',
+  period7: '7 Days',
+  period30: '30 Days',
+  noData: 'No data available. Click "Update Data" to fetch.',
+  proceedingSubtext: 'Ratio of events with 10+ booked'
 };
 
 function cn(...inputs: (string | undefined | null | false)[]) {
@@ -175,7 +67,6 @@ export default function Dashboard() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingDays, setLoadingDays] = useState<number | null>(null);
-  const [lang, setLang] = useState<Lang>('ko');
   const [period, setPeriod] = useState<Period>(1);
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().substring(0, 10));
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
@@ -188,8 +79,6 @@ export default function Dashboard() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-
-  const t = DICT[lang];
 
   const fetchEvents = async () => {
     setLoading(true);
@@ -224,16 +113,13 @@ export default function Dashboard() {
       if (data.success) {
         setLastUpdated(new Date().toLocaleTimeString());
         await fetchEvents();
-        const msg = lang === 'ko'
-          ? `업데이트 완료: ${data.count}개 이벤트 (${days}일)`
-          : `Update complete: ${data.count} events (${days} days)`;
-        alert(msg);
+        alert(`Update complete: ${data.count} events (${days} days)`);
       } else {
         alert('Update failed: ' + (data.error || 'Unknown error'));
       }
     } catch (error) {
       console.error('Quick update failed:', error);
-      alert(lang === 'ko' ? '업데이트 실패' : 'Update failed');
+      alert('Update failed');
     } finally {
       setLoading(false);
       setLoadingDays(null);
@@ -242,7 +128,7 @@ export default function Dashboard() {
 
   const cleanupData = async () => {
     if (period !== 1) {
-      alert(lang === 'ko' ? '1일 모드에서만 정리가 가능합니다.' : 'Cleanup is only available in 1-day mode.');
+      alert('Cleanup is only available in 1-day mode.');
       return;
     }
 
@@ -252,10 +138,7 @@ export default function Dashboard() {
       const data = await res.json();
 
       if (data.success) {
-        const msg = lang === 'ko'
-          ? `정리 완료: ${data.deletedCount}개 삭제됨 (총 ${data.checked}개 확인)`
-          : `Cleanup complete: ${data.deletedCount} deleted (${data.checked} checked)`;
-        alert(msg);
+        alert(`Cleanup complete: ${data.deletedCount} deleted (${data.checked} checked)`);
         await fetchEvents();
       } else {
         alert('Cleanup failed: ' + (data.error || 'Unknown error'));
@@ -280,9 +163,9 @@ export default function Dashboard() {
       e.date,
       e.time,
       `"${e.title.replace(/"/g, '""')}"`, // Escape quotes
-      `"${translateContent(e.stadium).replace(/"/g, '""')}"`,
+      `"${e.stadium.replace(/"/g, '""')}"`,
       e.region || '',
-      translateStatus(e.status),
+      e.status,
       e.booked,
       e.capacity,
       e.url
@@ -312,34 +195,7 @@ export default function Dashboard() {
     setCurrentPage(1);
   }, [period, selectedDate, selectedRegion, events]);
 
-  const translateStatus = (originalStatus: string) => {
-    if (lang === 'ja') return originalStatus;
-    for (const [key, val] of Object.entries(DICT.ko.statusMap)) {
-      if (originalStatus.includes(key)) return val;
-    }
-    return originalStatus;
-  };
 
-  const translateContent = (text: string) => {
-    if (lang === 'ja') return text;
-    // Correct Logic:
-    // 1. Replace Keywords (Whole words) -> Korean
-    // 2. Transliterate remaining characters -> Korean
-
-    let mixed = text;
-
-    // 1. Prefecture Transliteration (Primary Priority)
-    Object.entries(PREFECTURE_MAP).forEach(([ja, ko]) => {
-      mixed = mixed.replaceAll(ja, ko);
-    });
-
-    // 2. Replace other Keywrods
-    Object.entries(KEYWORDS).forEach(([ja, ko]) => {
-      mixed = mixed.replaceAll(ja, ko);
-    });
-
-    return transliterate(mixed, 'ko');
-  };
 
   const uniqueRegions = React.useMemo(() => {
     const set = new Set<string>();
@@ -392,8 +248,8 @@ export default function Dashboard() {
         const matchesKeyword =
           e.title.toLowerCase().includes(keyword) ||
           e.stadium.toLowerCase().includes(keyword) ||
-          translateContent(e.title).toLowerCase().includes(keyword) ||
-          translateContent(e.stadium).toLowerCase().includes(keyword);
+          e.title.toLowerCase().includes(keyword) ||
+          e.stadium.toLowerCase().includes(keyword);
         if (!matchesKeyword) return false;
       }
 
@@ -556,14 +412,14 @@ export default function Dashboard() {
           <div>
             <div className="flex items-center gap-4">
               <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
-                {t.title}
+                {UI.title}
               </h1>
               <Link href="/upload" className="text-sm font-medium text-neutral-500 hover:text-indigo-400 transition-colors flex items-center gap-1 border border-neutral-800 rounded-full px-3 py-1 bg-neutral-900/50">
                 <Upload className="w-3 h-3" />
                 Upload CSV
               </Link>
             </div>
-            <p className="text-neutral-400 mt-1">{t.subtitle}</p>
+            <p className="text-neutral-400 mt-1">{UI.subtitle}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
@@ -575,10 +431,10 @@ export default function Dashboard() {
                 className="bg-transparent text-white text-sm px-3 py-1.5 outline-none font-medium appearance-none min-w-[80px] cursor-pointer"
                 style={{ textAlignLast: 'center' }}
               >
-                <option value="all" className="bg-neutral-900">{lang === 'ko' ? '전체 지역' : 'All Regions'}</option>
+                <option value="all" className="bg-neutral-900">{'All Regions'}</option>
                 {uniqueRegions.map(region => (
                   <option key={region} value={region} className="bg-neutral-900">
-                    {translateContent(region)}
+                    {region}
                   </option>
                 ))}
               </select>
@@ -596,15 +452,11 @@ export default function Dashboard() {
             )}
 
             <div className="flex items-center bg-neutral-900 rounded-lg p-1 border border-neutral-800">
-              <button onClick={() => setPeriod(1)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 1 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{t.period1}</button>
-              <button onClick={() => setPeriod(7)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 7 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{t.period7}</button>
-              <button onClick={() => setPeriod(30)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 30 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{t.period30}</button>
+              <button onClick={() => setPeriod(1)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 1 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{UI.period1}</button>
+              <button onClick={() => setPeriod(7)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 7 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{UI.period7}</button>
+              <button onClick={() => setPeriod(30)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 30 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{UI.period30}</button>
             </div>
 
-            <div className="flex items-center bg-neutral-900 rounded-lg p-1 border border-neutral-800">
-              <button onClick={() => setLang('ko')} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", lang === 'ko' ? "bg-emerald-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>KO</button>
-              <button onClick={() => setLang('ja')} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", lang === 'ja' ? "bg-emerald-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>JA</button>
-            </div>
 
             <button
               onClick={downloadCSV}
@@ -621,7 +473,7 @@ export default function Dashboard() {
             <button
               onClick={cleanupData}
               disabled={loading || period !== 1}
-              title={period !== 1 ? (lang === 'ko' ? '1일 모드에서만 사용 가능' : 'Only available in 1-day mode') : (lang === 'ko' ? '삭제된 이벤트 정리' : 'Cleanup deleted events')}
+              title={period !== 1 ? 'Only available in 1-day mode' : 'Cleanup deleted events'}
               className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-200",
                 "bg-red-900/50 hover:bg-red-800/70 active:bg-red-700/80 border border-red-800/50",
@@ -630,15 +482,15 @@ export default function Dashboard() {
               )}
             >
               <Trash2 className="w-4 h-4" />
-              {lang === 'ko' ? '정리' : 'Cleanup'}
+              {'Cleanup'}
             </button>
 
             <div className="flex items-center gap-1 bg-neutral-900 rounded-lg p-1 border border-neutral-800">
-              <span className="text-xs text-neutral-500 px-2">{lang === 'ko' ? '업데이트' : 'Update'}</span>
+              <span className="text-xs text-neutral-500 px-2">{'Update'}</span>
               <button
                 onClick={() => quickUpdate(1)}
                 disabled={loading}
-                title={lang === 'ko' ? '오늘 데이터만 새로고침' : 'Refresh today only'}
+                title={'Refresh today only'}
                 className={cn(
                   "w-14 px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-1",
                   "bg-emerald-600 hover:bg-emerald-500 text-white",
@@ -646,12 +498,12 @@ export default function Dashboard() {
                 )}
               >
                 {loadingDays === 1 && <RefreshCw className="w-3 h-3 animate-spin" />}
-                1{lang === 'ko' ? '일' : 'D'}
+                1{'D'}
               </button>
               <button
                 onClick={() => quickUpdate(7)}
                 disabled={loading}
-                title={lang === 'ko' ? '7일간 데이터 새로고침' : 'Refresh 7 days'}
+                title={'Refresh 7 days'}
                 className={cn(
                   "w-14 px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-1",
                   "bg-blue-600 hover:bg-blue-500 text-white",
@@ -659,12 +511,12 @@ export default function Dashboard() {
                 )}
               >
                 {loadingDays === 7 && <RefreshCw className="w-3 h-3 animate-spin" />}
-                7{lang === 'ko' ? '일' : 'D'}
+                7{'D'}
               </button>
               <button
                 onClick={() => quickUpdate(14)}
                 disabled={loading}
-                title={lang === 'ko' ? '14일간 데이터 새로고침' : 'Refresh 14 days'}
+                title={'Refresh 14 days'}
                 className={cn(
                   "w-16 px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-1",
                   "bg-indigo-600 hover:bg-indigo-500 text-white",
@@ -672,7 +524,7 @@ export default function Dashboard() {
                 )}
               >
                 {loadingDays === 14 && <RefreshCw className="w-3 h-3 animate-spin" />}
-                14{lang === 'ko' ? '일' : 'D'}
+                14{'D'}
               </button>
             </div>
           </div>
@@ -681,50 +533,50 @@ export default function Dashboard() {
         {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
           <StatCard
-            label={t.totalEvents}
+            label={UI.totalEvents}
             value={analytics.totalEvents}
             icon={<MapPin className="w-5 h-5 text-emerald-400" />}
             subtext={`${period === 1 ? 'Selected Date' : period + ' Days'}`}
           />
           <StatCard
-            label={lang === 'ko' ? '총 주최자' : 'Organizers'}
+            label={'Organizers'}
             value={analytics.totalOrganizers}
             icon={<Users className="w-5 h-5 text-cyan-400" />}
             subtext={`${period === 1 ? 'Selected Date' : period + ' Days'}`}
           />
           <StatCard
-            label={t.totalCapacity}
+            label={UI.totalCapacity}
             value={analytics.totalCapacity}
             icon={<Users className="w-5 h-5 text-blue-400" />}
             subtext="Available spots"
           />
           <StatCard
-            label={t.fillRate}
+            label={UI.fillRate}
             value={`${analytics.totalCapacity ? Math.round((analytics.totalBooked / analytics.totalCapacity) * 100) : 0}%`}
             icon={<AlertCircle className="w-5 h-5 text-orange-400" />}
             subtext={`${analytics.totalBooked} booked`}
           />
           <StatCard
-            label={t.proceedingRate}
+            label={UI.proceedingRate}
             value={`${analytics.totalEvents ? Math.round((analytics.proceedingCount / analytics.totalEvents) * 100) : 0}%`}
             icon={<TrendingUp className="w-5 h-5 text-pink-400" />}
-            subtext={t.proceedingSubtext}
+            subtext={UI.proceedingSubtext}
           />
         </div>
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Supply Trend Chart */}
-          <ChartCard title={t.supplyByDate}>
-            <SupplyChart data={analytics.byDate} t={t} scrollable={period === 30} />
+          <ChartCard title={UI.supplyByDate}>
+            <SupplyChart data={analytics.byDate} scrollable={period === 30} />
           </ChartCard>
 
           {/* Organizer Event Top */}
-          <ChartCard title={t.supplyByStadium}>
+          <ChartCard title={UI.supplyByStadium}>
             <OrganizerChart
               data={analytics.byStadium.map(item => ({
                 ...item,
-                stadium: translateContent(item.stadium)
+                stadium: item.stadium
               }))}
             />
           </ChartCard>
@@ -734,7 +586,7 @@ export default function Dashboard() {
         <div className="bg-neutral-900/50 border border-neutral-800 rounded-xl overflow-hidden backdrop-blur-sm">
           <div className="p-6 border-b border-neutral-800">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-              <h3 className="text-lg font-semibold text-white">{t.recentEvents}</h3>
+              <h3 className="text-lg font-semibold text-white">{UI.recentEvents}</h3>
 
               {/* Search & Filter Controls */}
               <div className="flex flex-wrap items-center gap-3">
@@ -745,7 +597,7 @@ export default function Dashboard() {
                     type="text"
                     value={searchKeyword}
                     onChange={(e) => { setSearchKeyword(e.target.value); setCurrentPage(1); }}
-                    placeholder={lang === 'ko' ? '제목, 주최자 검색...' : 'Search title, organizer...'}
+                    placeholder={'Search title, organizer...'}
                     className="bg-neutral-800 border border-neutral-700 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-indigo-500 w-56"
                   />
                 </div>
@@ -754,7 +606,7 @@ export default function Dashboard() {
                 <div className="relative group">
                   <button className="flex items-center gap-2 bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2 text-sm text-neutral-300 hover:border-neutral-600">
                     <Filter className="w-4 h-4" />
-                    {lang === 'ko' ? '상태' : 'Status'}
+                    {'Status'}
                     {selectedStatuses.length > 0 && (
                       <span className="bg-indigo-600 text-white text-xs rounded-full px-1.5">{selectedStatuses.length}</span>
                     )}
@@ -776,7 +628,7 @@ export default function Dashboard() {
                             }}
                             className="rounded border-neutral-600 bg-neutral-700 text-indigo-600 focus:ring-indigo-500"
                           />
-                          <span className="text-sm text-neutral-300">{translateStatus(status)}</span>
+                          <span className="text-sm text-neutral-300">{status}</span>
                         </label>
                       ))}
                       {selectedStatuses.length > 0 && (
@@ -784,7 +636,7 @@ export default function Dashboard() {
                           onClick={() => { setSelectedStatuses([]); setCurrentPage(1); }}
                           className="w-full text-left px-3 py-2 text-xs text-red-400 hover:bg-neutral-700 rounded"
                         >
-                          {lang === 'ko' ? '필터 초기화' : 'Clear filters'}
+                          {'Clear filters'}
                         </button>
                       )}
                     </div>
@@ -805,7 +657,7 @@ export default function Dashboard() {
                     }}
                   >
                     <div className="flex items-center gap-1">
-                      {t.date}
+                      Date
                       {sortField === 'date' && (sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
                     </div>
                   </th>
@@ -817,11 +669,11 @@ export default function Dashboard() {
                     }}
                   >
                     <div className="flex items-center gap-1">
-                      {t.time}
+                      Time
                       {sortField === 'time' && (sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
                     </div>
                   </th>
-                  <th className="px-6 py-4">{t.eventTitle}</th>
+                  <th className="px-6 py-4">Title</th>
                   <th
                     className="px-6 py-4 cursor-pointer hover:text-white transition-colors select-none"
                     onClick={() => {
@@ -830,7 +682,7 @@ export default function Dashboard() {
                     }}
                   >
                     <div className="flex items-center gap-1">
-                      {t.organizer}
+                      Organizer
                       {sortField === 'stadium' && (sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
                     </div>
                   </th>
@@ -842,11 +694,11 @@ export default function Dashboard() {
                     }}
                   >
                     <div className="flex items-center gap-1">
-                      {t.status}
+                      Status
                       {sortField === 'status' && (sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-right">{t.spots}</th>
+                  <th className="px-6 py-4 text-right">Spots</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800">
@@ -856,18 +708,18 @@ export default function Dashboard() {
                     <td className="px-6 py-4 whitespace-nowrap">{event.time}</td>
                     <td className="px-6 py-4 font-medium text-white max-w-xs truncate">
                       <a href={event.url} target="_blank" rel="noopener noreferrer" className="hover:text-indigo-400 hover:underline">
-                        {translateContent(event.title)}
+                        {event.title}
                       </a>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap max-w-xs truncate">{translateContent(event.stadium)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap max-w-xs truncate">{event.stadium}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={cn(
                         "px-2 py-1 rounded-full text-xs font-medium",
-                        translateStatus(event.status).includes('접수') || event.status.includes('受付け') ? "bg-emerald-500/10 text-emerald-400" :
-                          translateStatus(event.status).includes('대기') || event.status.includes('キャンセル') ? "bg-orange-500/10 text-orange-400" :
+                        event.status.includes('접수') || event.status.includes('受付け') ? "bg-emerald-500/10 text-emerald-400" :
+                          event.status.includes('대기') || event.status.includes('キャンセル') ? "bg-orange-500/10 text-orange-400" :
                             "bg-neutral-700 text-neutral-400"
                       )}>
-                        {translateStatus(event.status)}
+                        {event.status}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
@@ -881,7 +733,7 @@ export default function Dashboard() {
         </div>
         {filteredEvents.length === 0 && !loading && (
           <div className="p-8 text-center text-neutral-500">
-            {t.noData}
+            {UI.noData}
           </div>
         )}
 

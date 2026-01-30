@@ -10,11 +10,10 @@ interface SupplyChartProps {
         count: number;
         proceeding: number;
     }[];
-    t: any;
     scrollable?: boolean;
 }
 
-export function SupplyChart({ data, t, scrollable = false }: SupplyChartProps) {
+export function SupplyChart({ data, scrollable = false }: SupplyChartProps) {
     // Calculate dynamic width: 50px per bar minimum for readability, at least 100% container width
     const minBarWidth = 50;
     const chartWidth = scrollable ? Math.max(data.length * minBarWidth, 600) : '100%';

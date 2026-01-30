@@ -327,7 +327,7 @@ export default function UploadPage() {
                         {/* Charts */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
                             <ChartCard title={t.supplyByDate}>
-                                <SupplyChart data={analytics.byDate} t={t} />
+                                <SupplyChart data={analytics.byDate} />
                             </ChartCard>
                             <ChartCard title={t.supplyByStadium}>
                                 <OrganizerChart data={analytics.byStadium.map(item => ({ ...item, stadium: translateContent(item.stadium) }))} />
