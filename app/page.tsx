@@ -36,24 +36,54 @@ interface AnalyticsData {
   totalOrganizers: number;
 }
 
+type Lang = 'ko' | 'ja';
 type Period = 1 | 7 | 30;
 
-// UI Labels (Japanese only - use Chrome translate for other languages)
-const UI = {
-  title: 'LaBOLA Analytics',
-  subtitle: 'フットサル個人参加イベント分析',
-  totalEvents: 'Total Events',
-  totalCapacity: 'Total Capacity',
-  fillRate: 'Fill Rate',
-  proceedingRate: 'Est. Proceeding Rate',
-  supplyByDate: 'Supply Forecast by Date',
-  supplyByStadium: 'Top Organizers by Events',
-  recentEvents: 'All Events',
-  period1: '1 Day',
-  period7: '7 Days',
-  period30: '30 Days',
-  noData: 'No data available. Click "Update Data" to fetch.',
-  proceedingSubtext: 'Ratio of events with 10+ booked'
+const DICT = {
+  ko: {
+    title: 'LaBOLA 분석 대시보드',
+    subtitle: '풋살 개인참가 이벤트 분석',
+    totalEvents: '총 이벤트',
+    totalCapacity: '총 모집 인원',
+    fillRate: '충원율',
+    proceedingRate: '예상 진행률',
+    supplyByDate: '일별 공급량 예측',
+    supplyByStadium: '주최자별 이벤트 상위',
+    recentEvents: '전체 이벤트',
+    date: '날짜', time: '시간', eventTitle: '제목',
+    organizer: '주최자', status: '상태', spots: '인원',
+    period1: '1일', period7: '7일', period30: '30일',
+    noData: '데이터가 없습니다. "데이터 업데이트"를 클릭하세요.',
+    proceedingSubtext: '10명 이상 예약된 이벤트 비율',
+    update: '업데이트', cleanup: '정리',
+    allRegions: '전체 지역', searchPlaceholder: '제목, 주최자 검색...',
+    clearFilters: '필터 초기화', organizers: '주최자',
+    statusMap: {
+      '受付け中': '접수중', 'キャンセル待ち': '대기자 모집',
+      '開催中止': '개최취소', '受付け終了': '접수마감',
+      '空いたら通知': '빈자리 알림', '受付け開始前': '접수시작전', '満席': '만석',
+    } as Record<string, string>,
+  },
+  ja: {
+    title: 'LaBOLA Analytics',
+    subtitle: 'Futsal Individual Participation Insights',
+    totalEvents: 'Total Events',
+    totalCapacity: 'Total Capacity',
+    fillRate: 'Fill Rate',
+    proceedingRate: 'Est. Proceeding Rate',
+    supplyByDate: 'Supply Forecast by Date',
+    supplyByStadium: 'Top Organizers by Events',
+    recentEvents: 'All Events',
+    date: 'Date', time: 'Time', eventTitle: 'Title',
+    organizer: 'Organizer', status: 'Status', spots: 'Spots',
+    period1: '1 Day', period7: '7 Days', period30: '30 Days',
+    noData: 'No data available. Click "Update Data" to fetch.',
+    proceedingSubtext: 'Ratio of events with 10+ booked',
+    update: 'Update', cleanup: 'Cleanup',
+    allRegions: 'All Regions', searchPlaceholder: 'Search title, organizer...',
+    clearFilters: 'Clear filters', organizers: 'Organizers',
+    statusMap: {} as Record<string, string>,
+  }
 };
 
 function cn(...inputs: (string | undefined | null | false)[]) {
@@ -67,6 +97,7 @@ export default function Dashboard() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingDays, setLoadingDays] = useState<number | null>(null);
+  const [lang, setLang] = useState<Lang>('ko');
   const [period, setPeriod] = useState<Period>(1);
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().substring(0, 10));
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
@@ -79,6 +110,16 @@ export default function Dashboard() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+
+  const t = DICT[lang];
+
+  const translateStatus = (originalStatus: string) => {
+    if (lang === 'ja') return originalStatus;
+    for (const [key, val] of Object.entries(DICT.ko.statusMap)) {
+      if (originalStatus.includes(key)) return val;
+    }
+    return originalStatus;
+  };
 
   const fetchEvents = async () => {
     setLoading(true);
@@ -113,7 +154,7 @@ export default function Dashboard() {
       if (data.success) {
         setLastUpdated(new Date().toLocaleTimeString());
         await fetchEvents();
-        alert(`Update complete: ${data.count} events (${days} days)`);
+        alert(lang === 'ko' ? `업데이트 완료: ${data.count}개 이벤트 (${days}일)` : `Update complete: ${data.count} events (${days} days)`);
       } else {
         alert('Update failed: ' + (data.error || 'Unknown error'));
       }
@@ -128,7 +169,7 @@ export default function Dashboard() {
 
   const cleanupData = async () => {
     if (period !== 1) {
-      alert('Cleanup is only available in 1-day mode.');
+      alert(lang === 'ko' ? '1일 모드에서만 정리가 가능합니다.' : 'Cleanup is only available in 1-day mode.');
       return;
     }
 
@@ -138,7 +179,7 @@ export default function Dashboard() {
       const data = await res.json();
 
       if (data.success) {
-        alert(`Cleanup complete: ${data.deletedCount} deleted (${data.checked} checked)`);
+        alert(lang === 'ko' ? `정리 완료: ${data.deletedCount}개 삭제됨 (총 ${data.checked}개 확인)` : `Cleanup complete: ${data.deletedCount} deleted (${data.checked} checked)`);
         await fetchEvents();
       } else {
         alert('Cleanup failed: ' + (data.error || 'Unknown error'));
@@ -412,14 +453,14 @@ export default function Dashboard() {
           <div>
             <div className="flex items-center gap-4">
               <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
-                {UI.title}
+                {t.title}
               </h1>
               <Link href="/upload" className="text-sm font-medium text-neutral-500 hover:text-indigo-400 transition-colors flex items-center gap-1 border border-neutral-800 rounded-full px-3 py-1 bg-neutral-900/50">
                 <Upload className="w-3 h-3" />
                 Upload CSV
               </Link>
             </div>
-            <p className="text-neutral-400 mt-1">{UI.subtitle}</p>
+            <p className="text-neutral-400 mt-1">{t.subtitle}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
@@ -431,7 +472,7 @@ export default function Dashboard() {
                 className="bg-transparent text-white text-sm px-3 py-1.5 outline-none font-medium appearance-none min-w-[80px] cursor-pointer"
                 style={{ textAlignLast: 'center' }}
               >
-                <option value="all" className="bg-neutral-900">{'All Regions'}</option>
+                <option value="all" className="bg-neutral-900">{t.allRegions}</option>
                 {uniqueRegions.map(region => (
                   <option key={region} value={region} className="bg-neutral-900">
                     {region}
@@ -452,11 +493,15 @@ export default function Dashboard() {
             )}
 
             <div className="flex items-center bg-neutral-900 rounded-lg p-1 border border-neutral-800">
-              <button onClick={() => setPeriod(1)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 1 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{UI.period1}</button>
-              <button onClick={() => setPeriod(7)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 7 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{UI.period7}</button>
-              <button onClick={() => setPeriod(30)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 30 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{UI.period30}</button>
+              <button onClick={() => setPeriod(1)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 1 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{t.period1}</button>
+              <button onClick={() => setPeriod(7)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 7 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{t.period7}</button>
+              <button onClick={() => setPeriod(30)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 30 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{t.period30}</button>
             </div>
 
+            <div className="flex items-center bg-neutral-900 rounded-lg p-1 border border-neutral-800">
+              <button onClick={() => setLang('ko')} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", lang === 'ko' ? "bg-emerald-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>KO</button>
+              <button onClick={() => setLang('ja')} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", lang === 'ja' ? "bg-emerald-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>JA</button>
+            </div>
 
             <button
               onClick={downloadCSV}
@@ -486,7 +531,7 @@ export default function Dashboard() {
             </button>
 
             <div className="flex items-center gap-1 bg-neutral-900 rounded-lg p-1 border border-neutral-800">
-              <span className="text-xs text-neutral-500 px-2">{'Update'}</span>
+              <span className="text-xs text-neutral-500 px-2">{t.update}</span>
               <button
                 onClick={() => quickUpdate(1)}
                 disabled={loading}
@@ -533,46 +578,46 @@ export default function Dashboard() {
         {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
           <StatCard
-            label={UI.totalEvents}
+            label={t.totalEvents}
             value={analytics.totalEvents}
             icon={<MapPin className="w-5 h-5 text-emerald-400" />}
-            subtext={`${period === 1 ? 'Selected Date' : period + ' Days'}`}
+            subtext={`${period === 1 ? (lang === 'ko' ? '선택일' : 'Selected Date') : period + (lang === 'ko' ? '일' : ' Days')}`}
           />
           <StatCard
-            label={'Organizers'}
+            label={t.organizers}
             value={analytics.totalOrganizers}
             icon={<Users className="w-5 h-5 text-cyan-400" />}
-            subtext={`${period === 1 ? 'Selected Date' : period + ' Days'}`}
+            subtext={`${period === 1 ? (lang === 'ko' ? '선택일' : 'Selected Date') : period + (lang === 'ko' ? '일' : ' Days')}`}
           />
           <StatCard
-            label={UI.totalCapacity}
+            label={t.totalCapacity}
             value={analytics.totalCapacity}
             icon={<Users className="w-5 h-5 text-blue-400" />}
-            subtext="Available spots"
+            subtext={lang === 'ko' ? '모집 가능 인원' : 'Available spots'}
           />
           <StatCard
-            label={UI.fillRate}
+            label={t.fillRate}
             value={`${analytics.totalCapacity ? Math.round((analytics.totalBooked / analytics.totalCapacity) * 100) : 0}%`}
             icon={<AlertCircle className="w-5 h-5 text-orange-400" />}
-            subtext={`${analytics.totalBooked} booked`}
+            subtext={`${analytics.totalBooked} ${lang === 'ko' ? '예약됨' : 'booked'}`}
           />
           <StatCard
-            label={UI.proceedingRate}
+            label={t.proceedingRate}
             value={`${analytics.totalEvents ? Math.round((analytics.proceedingCount / analytics.totalEvents) * 100) : 0}%`}
             icon={<TrendingUp className="w-5 h-5 text-pink-400" />}
-            subtext={UI.proceedingSubtext}
+            subtext={t.proceedingSubtext}
           />
         </div>
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Supply Trend Chart */}
-          <ChartCard title={UI.supplyByDate}>
+          <ChartCard title={t.supplyByDate}>
             <SupplyChart data={analytics.byDate} scrollable={period === 30} />
           </ChartCard>
 
           {/* Organizer Event Top */}
-          <ChartCard title={UI.supplyByStadium}>
+          <ChartCard title={t.supplyByStadium}>
             <OrganizerChart
               data={analytics.byStadium.map(item => ({
                 ...item,
@@ -586,7 +631,7 @@ export default function Dashboard() {
         <div className="bg-neutral-900/50 border border-neutral-800 rounded-xl overflow-hidden backdrop-blur-sm">
           <div className="p-6 border-b border-neutral-800">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-              <h3 className="text-lg font-semibold text-white">{UI.recentEvents}</h3>
+              <h3 className="text-lg font-semibold text-white">{t.recentEvents}</h3>
 
               {/* Search & Filter Controls */}
               <div className="flex flex-wrap items-center gap-3">
@@ -597,7 +642,7 @@ export default function Dashboard() {
                     type="text"
                     value={searchKeyword}
                     onChange={(e) => { setSearchKeyword(e.target.value); setCurrentPage(1); }}
-                    placeholder={'Search title, organizer...'}
+                    placeholder={t.searchPlaceholder}
                     className="bg-neutral-800 border border-neutral-700 rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-indigo-500 w-56"
                   />
                 </div>
@@ -606,7 +651,7 @@ export default function Dashboard() {
                 <div className="relative group">
                   <button className="flex items-center gap-2 bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2 text-sm text-neutral-300 hover:border-neutral-600">
                     <Filter className="w-4 h-4" />
-                    {'Status'}
+                    {t.status}
                     {selectedStatuses.length > 0 && (
                       <span className="bg-indigo-600 text-white text-xs rounded-full px-1.5">{selectedStatuses.length}</span>
                     )}
@@ -628,7 +673,7 @@ export default function Dashboard() {
                             }}
                             className="rounded border-neutral-600 bg-neutral-700 text-indigo-600 focus:ring-indigo-500"
                           />
-                          <span className="text-sm text-neutral-300">{status}</span>
+                          <span className="text-sm text-neutral-300">{translateStatus(status)}</span>
                         </label>
                       ))}
                       {selectedStatuses.length > 0 && (
@@ -636,7 +681,7 @@ export default function Dashboard() {
                           onClick={() => { setSelectedStatuses([]); setCurrentPage(1); }}
                           className="w-full text-left px-3 py-2 text-xs text-red-400 hover:bg-neutral-700 rounded"
                         >
-                          {'Clear filters'}
+                          {t.clearFilters}
                         </button>
                       )}
                     </div>
@@ -657,7 +702,7 @@ export default function Dashboard() {
                     }}
                   >
                     <div className="flex items-center gap-1">
-                      Date
+                      {t.date}
                       {sortField === 'date' && (sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
                     </div>
                   </th>
@@ -669,11 +714,11 @@ export default function Dashboard() {
                     }}
                   >
                     <div className="flex items-center gap-1">
-                      Time
+                      {t.time}
                       {sortField === 'time' && (sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
                     </div>
                   </th>
-                  <th className="px-6 py-4">Title</th>
+                  <th className="px-6 py-4">{t.eventTitle}</th>
                   <th
                     className="px-6 py-4 cursor-pointer hover:text-white transition-colors select-none"
                     onClick={() => {
@@ -682,7 +727,7 @@ export default function Dashboard() {
                     }}
                   >
                     <div className="flex items-center gap-1">
-                      Organizer
+                      {t.organizer}
                       {sortField === 'stadium' && (sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
                     </div>
                   </th>
@@ -694,11 +739,11 @@ export default function Dashboard() {
                     }}
                   >
                     <div className="flex items-center gap-1">
-                      Status
+                      {t.status}
                       {sortField === 'status' && (sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-right">Spots</th>
+                  <th className="px-6 py-4 text-right">{t.spots}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800">
@@ -719,7 +764,7 @@ export default function Dashboard() {
                           event.status.includes('대기') || event.status.includes('キャンセル') ? "bg-orange-500/10 text-orange-400" :
                             "bg-neutral-700 text-neutral-400"
                       )}>
-                        {event.status}
+                        {translateStatus(event.status)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
@@ -733,7 +778,7 @@ export default function Dashboard() {
         </div>
         {filteredEvents.length === 0 && !loading && (
           <div className="p-8 text-center text-neutral-500">
-            {UI.noData}
+            {t.noData}
           </div>
         )}
 
