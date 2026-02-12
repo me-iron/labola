@@ -359,7 +359,11 @@ export default function Dashboard() {
     filteredEvents.forEach(event => {
       // If period is 1, we want hourly aggregation. Use `startTime` for proper sorting.
       // If period > 1, we want daily aggregation. Use `isoDate`.
-      const dateKey = period === 1 ? (event.startTime || event.time.split('-')[0]) : (event.isoDate || event.date);
+      let dateKey = period === 1 ? (event.startTime || event.time.split('-')[0]) : (event.isoDate || event.date);
+      // Pad single-digit hours: "6:30" → "06:30" for correct chronological sorting
+      if (period === 1 && dateKey && /^\d:/.test(dateKey)) {
+        dateKey = '0' + dateKey;
+      }
 
       const currentDate = byDateMap.get(dateKey) || { supply: 0, booked: 0, count: 0, proceeding: 0 };
 
