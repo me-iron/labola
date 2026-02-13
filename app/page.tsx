@@ -62,6 +62,7 @@ const DICT = {
       '受付け中': '접수중', 'キャンセル待ち': '대기자 모집',
       '開催中止': '개최취소', '受付け終了': '접수마감',
       '空いたら通知': '빈자리 알림', '受付け開始前': '접수시작전', '満席': '만석',
+      'showing': '표시 중', 'previous': '이전', 'next': '다음', 'page': '페이지',
     } as Record<string, string>,
   },
   ja: {
@@ -82,7 +83,9 @@ const DICT = {
     update: 'Update', cleanup: 'Cleanup',
     allRegions: 'All Regions', searchPlaceholder: 'Search title, organizer...',
     clearFilters: 'Clear filters', organizers: 'Organizers',
-    statusMap: {} as Record<string, string>,
+    statusMap: {
+      'showing': 'Showing', 'previous': 'Previous', 'next': 'Next', 'page': 'Page',
+    } as Record<string, string>,
   }
 };
 
@@ -121,13 +124,20 @@ export default function Dashboard() {
     return originalStatus;
   };
 
-  const fetchEvents = async () => {
+  // Wrap in useCallback to avoid useEffect dependency issues
+  const fetchEvents = React.useCallback(async () => {
     setLoading(true);
     try {
       const startDate = period === 1 ? selectedDate : new Date().toISOString().substring(0, 10);
 
-      // Read from DB
-      const res = await fetch(`/api/events?startDate=${startDate}`);
+      // Calculate endDate for optimization
+      const endDate = new Date(startDate);
+      // For period 1, endDate is same day. For others, add period - 1 days.
+      endDate.setDate(endDate.getDate() + (period === 1 ? 0 : period - 1));
+      const endDateStr = endDate.toISOString().substring(0, 10);
+
+      // Read from DB with date range
+      const res = await fetch(`/api/events?startDate=${startDate}&endDate=${endDateStr}`);
       const data = await res.json();
 
       if (data.success) {
@@ -139,7 +149,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [period, selectedDate]);
 
   const quickUpdate = async (days: number) => {
     setLoading(true);
@@ -229,7 +239,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchEvents();
-  }, [period, selectedDate]);
+  }, [fetchEvents]);
 
   // Reset pagination when filters change
   useEffect(() => {
@@ -288,8 +298,6 @@ export default function Dashboard() {
         const keyword = searchKeyword.toLowerCase();
         const matchesKeyword =
           e.title.toLowerCase().includes(keyword) ||
-          e.stadium.toLowerCase().includes(keyword) ||
-          e.title.toLowerCase().includes(keyword) ||
           e.stadium.toLowerCase().includes(keyword);
         if (!matchesKeyword) return false;
       }
@@ -312,11 +320,20 @@ export default function Dashboard() {
           comparison = dateA.localeCompare(dateB);
           if (comparison === 0) {
             // Secondary sort by start time
-            comparison = (a.startTime || a.time).localeCompare(b.startTime || b.time);
+            // Pad single digit hours so "6:30" < "21:30"
+            const timeA = (a.startTime || a.time);
+            const timeB = (b.startTime || b.time);
+            const padTimeA = /^\d:/.test(timeA) ? '0' + timeA : timeA;
+            const padTimeB = /^\d:/.test(timeB) ? '0' + timeB : timeB;
+            comparison = padTimeA.localeCompare(padTimeB);
           }
           break;
         case 'time':
-          comparison = (a.startTime || a.time).localeCompare(b.startTime || b.time);
+          const tA = (a.startTime || a.time);
+          const tB = (b.startTime || b.time);
+          const pA = /^\d:/.test(tA) ? '0' + tA : tA;
+          const pB = /^\d:/.test(tB) ? '0' + tB : tB;
+          comparison = pA.localeCompare(pB);
           break;
         case 'stadium':
           comparison = a.stadium.localeCompare(b.stadium);
@@ -341,20 +358,6 @@ export default function Dashboard() {
     // Filter events based on Period (1, 7, 15) for Charts
     // The 'filteredEvents' already contains the correct date range event list.
     // However, for the chart X-axis, we want to ensure we show all dates in the range, even with 0 data.
-
-    // Generate full date range keys
-    const dateKeys = new Set<string>();
-    if (period > 1) {
-      const today = new Date();
-      for (let i = 0; i < period; i++) {
-        const d = new Date(today);
-        d.setDate(today.getDate() + i);
-        // Format: "1.22(Wed)" to match crawler format if possible, 
-        // BUT crawler returns "YYYY-MM-DD" in isoDate. Use isoDate for sorting.
-        // Actually, `byDateMap` uses `dateKey`.
-        // Let's use `isoDate` for map keys to be safe, then format for display.
-      }
-    }
 
     filteredEvents.forEach(event => {
       // If period is 1, we want hourly aggregation. Use `startTime` for proper sorting.
@@ -531,7 +534,7 @@ export default function Dashboard() {
               )}
             >
               <Trash2 className="w-4 h-4" />
-              {'Cleanup'}
+              {t.cleanup}
             </button>
 
             <div className="flex items-center gap-1 bg-neutral-900 rounded-lg p-1 border border-neutral-800">
@@ -623,10 +626,7 @@ export default function Dashboard() {
           {/* Organizer Event Top */}
           <ChartCard title={t.supplyByStadium}>
             <OrganizerChart
-              data={analytics.byStadium.map(item => ({
-                ...item,
-                stadium: item.stadium
-              }))}
+              data={analytics.byStadium.slice(0, 10)}
             />
           </ChartCard>
         </div>
@@ -790,7 +790,7 @@ export default function Dashboard() {
         {filteredEvents.length > 0 && (
           <div className="border-t border-neutral-800 p-4 flex items-center justify-between">
             <span className="text-sm text-neutral-400">
-              Showing {Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, filteredEvents.length)} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredEvents.length)} of {filteredEvents.length}
+              {t.statusMap['showing'] || 'Showing'} {Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, filteredEvents.length)} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredEvents.length)} of {filteredEvents.length}
             </span>
             <div className="flex gap-2">
               <button
@@ -798,17 +798,17 @@ export default function Dashboard() {
                 disabled={currentPage === 1}
                 className="px-3 py-1 text-sm bg-neutral-800 rounded disabled:opacity-50 hover:bg-neutral-700 disabled:cursor-not-allowed"
               >
-                Previous
+                {t.statusMap['previous'] || 'Previous'}
               </button>
               <span className="px-2 py-1 text-sm text-neutral-400 self-center">
-                Page {currentPage} / {Math.max(1, Math.ceil(filteredEvents.length / ITEMS_PER_PAGE))}
+                {t.statusMap['page'] || 'Page'} {currentPage} / {Math.max(1, Math.ceil(filteredEvents.length / ITEMS_PER_PAGE))}
               </span>
               <button
                 onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredEvents.length / ITEMS_PER_PAGE), p + 1))}
                 disabled={currentPage >= Math.ceil(filteredEvents.length / ITEMS_PER_PAGE)}
                 className="px-3 py-1 text-sm bg-neutral-800 rounded disabled:opacity-50 hover:bg-neutral-700 disabled:cursor-not-allowed"
               >
-                Next
+                {t.statusMap['next'] || 'Next'}
               </button>
             </div>
           </div>

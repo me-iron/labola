@@ -8,6 +8,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('startDate') || new Date().toISOString().substring(0, 10);
 
+    const endDate = searchParams.get('endDate');
+
     // Paginated fetch to bypass Supabase 1000 row default limit
     const PAGE_SIZE = 1000;
     let allData: any[] = [];
@@ -18,10 +20,16 @@ export async function GET(request: Request) {
         const from = page * PAGE_SIZE;
         const to = from + PAGE_SIZE - 1;
 
-        const { data, error } = await supabase
+        let query = supabase
             .from('match')
             .select('*')
-            .gte('iso_date', startDate)
+            .gte('iso_date', startDate);
+
+        if (endDate) {
+            query = query.lte('iso_date', endDate);
+        }
+
+        const { data, error } = await query
             .order('iso_date', { ascending: true })
             .order('start_time', { ascending: true })
             .range(from, to);

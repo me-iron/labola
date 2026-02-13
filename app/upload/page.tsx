@@ -6,7 +6,7 @@ import { MapPin, Calendar, Users, AlertCircle, TrendingUp, Upload, ArrowLeft, Fi
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import Link from 'next/link';
-import { transliterate } from '@/lib/transliterate';
+// import { transliterate } from '@/lib/transliterate'; // Removed as per QA fix
 import { StatCard } from '@/components/StatCard';
 import { ChartCard } from '@/components/ChartCard';
 import { SupplyChart } from '@/components/SupplyChart';
@@ -143,19 +143,23 @@ export default function UploadPage() {
             // Clean up quotes
             const cleanValues = values.map(v => v.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
 
+            // QA Fix: Parse "1.24 (sat)" to "YYYY-MM-DD" isoDate
+            let isoDateStr = new Date().toISOString().substring(0, 10);
+            if (cleanValues[1]) {
+                const datePart = cleanValues[1].split('(')[0].trim(); // "1.24"
+                const [m, d] = datePart.split('.');
+                if (m && d) {
+                    const year = new Date().getFullYear();
+                    isoDateStr = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+                }
+            }
+
             // Map to Event interface using index
             // 0: ID, 1: Date, 2: Time, 3: Title, 4: Organizer, 5: Region, 6: Status, 7: Booked, 8: Capacity, 9: URL
             return {
                 id: cleanValues[0] || `csv-${index}`,
                 date: cleanValues[1],
-                isoDate: new Date().toISOString().substring(0, 10), // CSV export didn't have isoDate column? 
-                // Wait, current export has: ID, Date, Time, Title, Organizer, Region, Status, Booked, Capacity, URL
-                // It does NOT have isoDate. We might need to parse Date "1.24 (sat)" or just use empty.
-                // Or better, update export to include isoDate.
-                // For now, let's try to infer or leave empty. 
-                // If empty, sorting by date might fail.
-                // Let's assume the user doesn't care about strict date sorting if it's external data, 
-                // OR we try to extract it.
+                isoDate: isoDateStr,
                 time: cleanValues[2],
                 title: cleanValues[3],
                 stadium: cleanValues[4],
@@ -172,9 +176,7 @@ export default function UploadPage() {
 
     // Helper functions
     const translateContent = (text: string) => {
-        // Simplified translation/transliteration
-        // For full support, needs the logic from page.tsx or a shared util
-        return transliterate(text, lang);
+        return text; // Removed transliteration, return original text
     };
 
     const translateStatus = (status: string) => {
@@ -300,7 +302,7 @@ export default function UploadPage() {
                                 className="bg-neutral-900 border border-neutral-800 text-white text-sm px-3 py-1.5 rounded-lg outline-none"
                             >
                                 <option value="all">All</option>
-                                {uniqueRegions.map(r => <option key={r} value={r}>{translateContent(r)}</option>)}
+                                {uniqueRegions.map(r => <option key={r} value={r}>{r}</option>)}
                             </select>
 
                             <button
@@ -330,7 +332,7 @@ export default function UploadPage() {
                                 <SupplyChart data={analytics.byDate} />
                             </ChartCard>
                             <ChartCard title={t.supplyByStadium}>
-                                <OrganizerChart data={analytics.byStadium.map(item => ({ ...item, stadium: translateContent(item.stadium) }))} />
+                                <OrganizerChart data={analytics.byStadium.map(item => ({ ...item, stadium: item.stadium }))} />
                             </ChartCard>
                         </div>
 
@@ -358,10 +360,10 @@ export default function UploadPage() {
                                                 <td className="px-6 py-4 whitespace-nowrap">{event.time}</td>
                                                 <td className="px-6 py-4 font-medium text-white max-w-xs truncate">
                                                     <a href={event.url} target="_blank" rel="noopener noreferrer" className="hover:text-indigo-400 hover:underline">
-                                                        {translateContent(event.title)}
+                                                        {event.title}
                                                     </a>
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap max-w-xs truncate">{translateContent(event.stadium)}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap max-w-xs truncate">{event.stadium}</td>
                                                 <td className="px-6 py-4 whitespace-nowrap">{translateStatus(event.status)}</td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-right">
                                                     <span className="text-white">{event.booked}</span> / {event.capacity}

@@ -106,7 +106,8 @@ async function crawlDate(dateStr: string): Promise<Event[]> {
         const region = regionMatch ? regionMatch[0] : null;
 
         // Extract start time from time range (e.g. "10:00-12:00" -> "10:00")
-        const startTime = time.split('-')[0]?.trim() || time;
+        let startTime = time.split('-')[0]?.trim() || time;
+        if (/^\d:/.test(startTime)) startTime = '0' + startTime;
 
         dateEvents.push({
           id: eventId,
