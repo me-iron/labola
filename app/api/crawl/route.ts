@@ -54,10 +54,19 @@ export async function GET(request: Request) {
             updated_at: new Date().toISOString()
         }));
 
+        // Deduplicate events by ID to prevent "ON CONFLICT DO UPDATE command cannot affect row a second time"
+        const uniqueDbEventsMap = new Map();
+        dbEvents.forEach(e => {
+            uniqueDbEventsMap.set(e.id, e);
+        });
+        const uniqueDbEvents = Array.from(uniqueDbEventsMap.values());
+
+        console.log(`Deduplicated events: ${dbEvents.length} -> ${uniqueDbEvents.length}`);
+
         // 3. Upsert to Supabase
         const { error } = await supabase
             .from('match')
-            .upsert(dbEvents, { onConflict: 'id' });
+            .upsert(uniqueDbEvents, { onConflict: 'id' });
 
         if (error) {
             console.error('Supabase Upsert Error:', error);
