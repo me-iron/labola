@@ -102,15 +102,33 @@ async function crawlDate(dateStr: string): Promise<Event[]> {
         const status = $(element).find('.c-eventcard__state').text().trim();
 
         // Extract Price
-        const priceText = $(element).find('.c-eventcard__price').text().trim(); // e.g. "¥2,000" or "2000円" or "無料"
+        // Based on HTML analysis, price is often in .c-eventcard__price or similar. 
+        // We will try finding the element containing "円" or "¥" if the class is not explicit, 
+        // but for now let's assume .c-eventcard__price is correct and just needs better parsing.
+        // If previous attempt failed, maybe it's nested or has different class.
+        // Let's iterate over ALL text nodes or find specific content.
+
         let price: number | null = null;
+        let priceText = $(element).find('.c-eventcard__price').text().trim();
+
+        // Fallback: search for text containing "円" in the card if class selector fails
+        if (!priceText) {
+          const textContent = $(element).text();
+          const priceMatch = textContent.match(/([0-9,]+円|¥[0-9,]+|無料)/);
+          if (priceMatch) {
+            priceText = priceMatch[0];
+          }
+        }
+
         if (priceText) {
-          // Remove non-numeric chars except for digits
-          const priceNumStr = priceText.replace(/[^0-9]/g, '');
-          if (priceNumStr) {
-            price = parseInt(priceNumStr, 10);
-          } else if (priceText.includes('無料')) {
+          if (priceText.includes('無料')) {
             price = 0;
+          } else {
+            // Remove non-numeric chars except for digits
+            const priceNumStr = priceText.replace(/[^0-9]/g, '');
+            if (priceNumStr) {
+              price = parseInt(priceNumStr, 10);
+            }
           }
         }
 
