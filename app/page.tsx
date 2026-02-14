@@ -64,6 +64,35 @@ const DICT = {
       '空いたら通知': '빈자리 알림', '受付け開始前': '접수시작전', '満席': '만석',
       'showing': '표시 중', 'previous': '이전', 'next': '다음', 'page': '페이지',
     } as Record<string, string>,
+    regionMap: {
+      '東京都': '도쿄도',
+      '神奈川県': '가나가와현',
+      '埼玉県': '사이타마현',
+      '千葉県': '지바현',
+      '大阪府': '오사카부',
+      '兵庫県': '효고현',
+      '愛知県': '아이치현',
+      '広島県': '히로시마현',
+      '福岡県': '후쿠오카현',
+      '北海道': '홋카이도',
+      '京都府': '교토부',
+      '茨城県': '이바라키현',
+      '栃木県': '도치기현',
+      '群馬県': '군마현',
+      '新潟県': '니이가타현',
+      '静岡県': '시즈오카현',
+      '奈良県': '나라현',
+      '滋賀県': '시가현',
+      '和歌山県': '와카야마현',
+      '岡山県': '오카야마현',
+      '三重県': '미에현',
+      '岐阜県': '기후현',
+      '大分県': '오이타현',
+      '沖縄県': '오키나와현',
+      '香川県': '카가와현',
+      '鹿児島県': '가고시마현',
+      '京都': '교토부',
+    } as Record<string, string>,
   },
   ja: {
     title: 'LaBOLA Analytics',
@@ -482,7 +511,7 @@ export default function Dashboard() {
                 <option value="all" className="bg-neutral-900">{t.allRegions}</option>
                 {uniqueRegions.map(region => (
                   <option key={region} value={region} className="bg-neutral-900">
-                    {region}
+                    {lang === 'ko' && DICT.ko.regionMap[region] ? DICT.ko.regionMap[region] : region}
                   </option>
                 ))}
               </select>
