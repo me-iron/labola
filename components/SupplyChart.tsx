@@ -10,10 +10,14 @@ interface SupplyChartProps {
         count: number;
         proceeding: number;
     }[];
+    lang: 'ko' | 'ja';
     scrollable?: boolean;
 }
 
-export function SupplyChart({ data, scrollable = false }: SupplyChartProps) {
+export function SupplyChart({ data, lang, scrollable = false }: SupplyChartProps) {
+    const labels = lang === 'ko'
+        ? { proceeding: '진행중 이벤트', total: '전체 이벤트' }
+        : { proceeding: '進行中イベント', total: '全イベント' };
     // Calculate dynamic width: 50px per bar minimum for readability, at least 100% container width
     const minBarWidth = 50;
     const chartWidth = scrollable ? Math.max(data.length * minBarWidth, 600) : '100%';
@@ -36,12 +40,12 @@ export function SupplyChart({ data, scrollable = false }: SupplyChartProps) {
             <Legend
                 // @ts-ignore
                 payload={[
-                    { value: "Proceeding Events", type: 'rect', color: '#10b981', id: 'proceeding' },
-                    { value: "Total Events", type: 'rect', color: '#6366f1', id: 'count' }
+                    { value: labels.proceeding, type: 'rect', color: '#10b981', id: 'proceeding' },
+                    { value: labels.total, type: 'rect', color: '#6366f1', id: 'count' }
                 ]}
             />
-            <Bar dataKey="proceeding" name="Proceeding Events" fill="#10b981" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="count" name="Total Events" fill="#6366f1" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="proceeding" name={labels.proceeding} fill="#10b981" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="count" name={labels.total} fill="#6366f1" radius={[4, 4, 0, 0]} />
         </BarChart>
     );
 

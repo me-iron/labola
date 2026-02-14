@@ -384,6 +384,7 @@ export default function Dashboard() {
 
   const analytics = React.useMemo((): AnalyticsData => {
     const byDateMap = new Map<string, { supply: number; booked: number; count: number; proceeding: number }>();
+    const byStadiumMap = new Map<string, { supply: number; count: number }>();
     const priceByRegion = new Map<string, { total: number; count: number }>();
     const priceByStadium = new Map<string, { total: number; count: number }>();
     let totalCapacity = 0;
