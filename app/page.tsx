@@ -23,6 +23,7 @@ interface Event {
   booked: number;
   capacity: number;
   status: string;
+  price?: number | null;
   region?: string | null;
 }
 

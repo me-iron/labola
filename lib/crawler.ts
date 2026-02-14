@@ -15,6 +15,7 @@ export interface Event {
   booked: number;
   capacity: number;
   status: string;
+  price: number | null; // Extracted Price (e.g. 2000)
   region: string | null; // Extracted Prefecture (e.g. 東京都)
 }
 
@@ -100,6 +101,19 @@ async function crawlDate(dateStr: string): Promise<Event[]> {
 
         const status = $(element).find('.c-eventcard__state').text().trim();
 
+        // Extract Price
+        const priceText = $(element).find('.c-eventcard__price').text().trim(); // e.g. "¥2,000" or "2000円" or "無料"
+        let price: number | null = null;
+        if (priceText) {
+          // Remove non-numeric chars except for digits
+          const priceNumStr = priceText.replace(/[^0-9]/g, '');
+          if (priceNumStr) {
+            price = parseInt(priceNumStr, 10);
+          } else if (priceText.includes('無料')) {
+            price = 0;
+          }
+        }
+
         // Extract Region from Address
         // Regex looks for [Any Chars] + [都|道|府|県] at the start of address
         const regionMatch = address.match(/^(.+?[都道府県])/);
@@ -123,6 +137,7 @@ async function crawlDate(dateStr: string): Promise<Event[]> {
           booked: isNaN(booked) ? 0 : booked,
           capacity: isNaN(capacity) ? 0 : capacity,
           status,
+          price,
         });
       });
 
