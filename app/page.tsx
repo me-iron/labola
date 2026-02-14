@@ -700,7 +700,7 @@ export default function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" />
                 <YAxis dataKey="region" type="category" width={80} style={{ fontSize: '12px' }} />
-                <Tooltip formatter={(value: number) => `¥${value.toLocaleString()}`} />
+                <Tooltip formatter={(value: number | undefined) => `¥${(value ?? 0).toLocaleString()}`} />
                 <Bar dataKey="avgPrice" fill="#8884d8" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -711,7 +711,7 @@ export default function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" />
                 <YAxis dataKey="stadium" type="category" width={100} style={{ fontSize: '12px' }} />
-                <Tooltip formatter={(value: number) => `¥${value.toLocaleString()}`} />
+                <Tooltip formatter={(value: number | undefined) => `¥${(value ?? 0).toLocaleString()}`} />
                 <Bar dataKey="avgPrice" fill="#82ca9d" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
