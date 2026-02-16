@@ -41,7 +41,7 @@ interface AnalyticsData {
 }
 
 type Lang = 'ko' | 'ja';
-type Period = 1 | 7 | 30;
+type Period = 1 | 7 | 14;
 
 const DICT = {
   ko: {
@@ -56,7 +56,7 @@ const DICT = {
     recentEvents: '전체 이벤트',
     date: '날짜', time: '시간', eventTitle: '제목',
     organizer: '주최자', status: '상태', spots: '인원',
-    period1: '1일', period7: '7일', period30: '30일',
+    period1: '1일', period7: '7일', period14: '14일',
     noData: '데이터가 없습니다. "데이터 업데이트"를 클릭하세요.',
     proceedingSubtext: '10명 이상 예약된 이벤트 비율',
     update: '업데이트', cleanup: '정리',
@@ -111,7 +111,7 @@ const DICT = {
     recentEvents: 'All Events',
     date: 'Date', time: 'Time', eventTitle: 'Title',
     organizer: 'Organizer', status: 'Status', spots: 'Spots',
-    period1: '1 Day', period7: '7 Days', period30: '30 Days',
+    period1: '1 Day', period7: '7 Days', period14: '14 Days',
     noData: 'No data available. Click "Update Data" to fetch.',
     proceedingSubtext: 'Ratio of events with 10+ booked',
     update: 'Update', cleanup: 'Cleanup',
@@ -134,6 +134,7 @@ export default function Dashboard() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingDays, setLoadingDays] = useState<number | null>(null);
+  const [priceProgress, setPriceProgress] = useState<string | null>(null);
   const [lang, setLang] = useState<Lang>('ko');
   const [period, setPeriod] = useState<Period>(1);
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().substring(0, 10));
@@ -176,7 +177,9 @@ export default function Dashboard() {
 
       if (data.success) {
         setEvents(data.events);
-        // setLastUpdated(new Date().toLocaleTimeString()); // Optional: DB doesn't give fetch time, only updated_at
+        if (data.lastUpdated) {
+          setLastUpdated(new Date(data.lastUpdated).toLocaleString('ko-KR', { timeZone: 'Asia/Tokyo', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }));
+        }
       }
     } catch (error) {
       console.error('Failed to fetch events', error);
@@ -188,26 +191,94 @@ export default function Dashboard() {
   const quickUpdate = async (days: number) => {
     setLoading(true);
     setLoadingDays(days);
+    setPriceProgress(null);
     try {
-      const startDate = new Date().toISOString().substring(0, 10);
-      console.log(`Quick update: ${days} days starting from ${startDate}`);
+      const start = new Date();
+      const allIds: string[] = [];
 
-      const res = await fetch(`/api/crawl?startDate=${startDate}&days=${days}&clean=true`);
-      const data = await res.json();
+      // Phase 1: Crawl list pages one-by-one (each ~2s, within 10s timeout)
+      for (let d = 0; d < days; d++) {
+        const date = new Date(start);
+        date.setDate(date.getDate() + d);
+        const dateStr = date.toISOString().substring(0, 10);
 
-      if (data.success) {
-        setLastUpdated(new Date().toLocaleTimeString());
-        await fetchEvents();
-        alert(lang === 'ko' ? `업데이트 완료: ${data.count}개 이벤트 (${days}일)` : `Update complete: ${data.count} events (${days} days)`);
-      } else {
-        alert('Update failed: ' + (data.error || 'Unknown error'));
+        let page = 1;
+        let hasNext = true;
+
+        while (hasNext && page <= 50) {
+          setPriceProgress(
+            lang === 'ko'
+              ? `이벤트 수집 중... ${dateStr} (${page}p)`
+              : `Crawling ${dateStr} page ${page}...`
+          );
+
+          try {
+            const res = await fetch(`/api/crawl-list?date=${dateStr}&page=${page}`);
+            const data = await res.json();
+            if (data.success) {
+              allIds.push(...(data.ids || []));
+              hasNext = data.hasNext;
+            } else {
+              hasNext = false;
+            }
+          } catch {
+            hasNext = false;
+          }
+          page++;
+        }
       }
+
+      console.log(`Phase 1 done: ${allIds.length} events collected`);
+
+      // Phase 2: Fetch prices by date (5 at a time, each ~1-2s)
+      let pricesFound = 0;
+      for (let d = 0; d < days; d++) {
+        const date = new Date(start);
+        date.setDate(date.getDate() + d);
+        const dateStr = date.toISOString().substring(0, 10);
+
+        let remaining = 1; // Start loop
+        while (remaining > 0) {
+          setPriceProgress(
+            lang === 'ko'
+              ? `가격 수집 중... ${dateStr} (${pricesFound}개 완료)`
+              : `Prices... ${dateStr} (${pricesFound} done)`
+          );
+
+          try {
+            const priceRes = await fetch(`/api/crawl-prices?date=${dateStr}&offset=0&limit=5`);
+            const priceData = await priceRes.json();
+            if (priceData.success) {
+              pricesFound += priceData.updated;
+              remaining = priceData.remaining || 0;
+              // If nothing was updated and nothing remains, break
+              if (priceData.updated === 0 && priceData.remaining === 0) break;
+            } else {
+              break;
+            }
+          } catch {
+            break;
+          }
+        }
+      }
+
+      // Phase 3: Reload data
+      setPriceProgress(lang === 'ko' ? '데이터 로딩 중...' : 'Loading data...');
+      setLastUpdated(new Date().toLocaleTimeString());
+      await fetchEvents();
+      setPriceProgress(null);
+      alert(
+        lang === 'ko'
+          ? `업데이트 완료: ${allIds.length}개 이벤트, ${pricesFound}개 가격 수집 (${days}일)`
+          : `Update complete: ${allIds.length} events, ${pricesFound} prices fetched (${days} days)`
+      );
     } catch (error) {
       console.error('Quick update failed:', error);
       alert('Update failed');
     } finally {
       setLoading(false);
       setLoadingDays(null);
+      setPriceProgress(null);
     }
   };
 
@@ -534,7 +605,14 @@ export default function Dashboard() {
                 Upload CSV
               </Link>
             </div>
-            <p className="text-neutral-400 mt-1">{t.subtitle}</p>
+            <p className="text-neutral-400 mt-1">
+              {t.subtitle}
+              {lastUpdated && (
+                <span className="ml-3 text-xs text-neutral-500 border border-neutral-800 rounded-full px-2 py-0.5">
+                  {lang === 'ko' ? '최근 업데이트' : 'Last updated'}: {lastUpdated}
+                </span>
+              )}
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
@@ -569,7 +647,7 @@ export default function Dashboard() {
             <div className="flex items-center bg-neutral-900 rounded-lg p-1 border border-neutral-800">
               <button onClick={() => setPeriod(1)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 1 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{t.period1}</button>
               <button onClick={() => setPeriod(7)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 7 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{t.period7}</button>
-              <button onClick={() => setPeriod(30)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 30 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{t.period30}</button>
+              <button onClick={() => setPeriod(14)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 14 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{t.period14}</button>
             </div>
 
             <div className="flex items-center bg-neutral-900 rounded-lg p-1 border border-neutral-800">
@@ -647,6 +725,12 @@ export default function Dashboard() {
               </button>
             </div>
           </div>
+          {priceProgress && (
+            <div className="flex items-center gap-2 mt-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+              <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
+              <span className="text-xs text-amber-300 font-medium">{priceProgress}</span>
+            </div>
+          )}
         </div>
 
         {/* Stats Grid */}
@@ -695,23 +779,23 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <ChartCard title={lang === 'ko' ? '지역별 평균 참가비 (엔)' : '地域別平均参加費 (円)'}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={analytics.avgPriceByRegion} layout="vertical" margin={{ left: 50 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" />
-                <YAxis dataKey="region" type="category" width={80} style={{ fontSize: '12px' }} />
-                <Tooltip formatter={(value: number | undefined) => `¥${(value ?? 0).toLocaleString()}`} />
+            <ResponsiveContainer width="100%" height={350}>
+              <BarChart data={analytics.avgPriceByRegion} layout="vertical" margin={{ left: 10, right: 20, top: 10, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" horizontal={true} vertical={false} />
+                <XAxis type="number" stroke="#888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v: number) => `¥${v.toLocaleString()}`} />
+                <YAxis dataKey="region" type="category" width={90} stroke="#888" fontSize={11} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={{ backgroundColor: '#171717', border: '1px solid #333', borderRadius: '8px' }} itemStyle={{ color: '#e5e5e5' }} formatter={(value: number | undefined) => `¥${(value ?? 0).toLocaleString()}`} />
                 <Bar dataKey="avgPrice" fill="#8884d8" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
           <ChartCard title={lang === 'ko' ? '주최자별 평균 참가비 (엔)' : '主催者別平均参加費 (円)'}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={analytics.avgPriceByStadium} layout="vertical" margin={{ left: 50 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" />
-                <YAxis dataKey="stadium" type="category" width={100} style={{ fontSize: '12px' }} />
-                <Tooltip formatter={(value: number | undefined) => `¥${(value ?? 0).toLocaleString()}`} />
+            <ResponsiveContainer width="100%" height={350}>
+              <BarChart data={analytics.avgPriceByStadium} layout="vertical" margin={{ left: 10, right: 20, top: 10, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" horizontal={true} vertical={false} />
+                <XAxis type="number" stroke="#888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v: number) => `¥${v.toLocaleString()}`} />
+                <YAxis dataKey="stadium" type="category" width={110} stroke="#888" fontSize={11} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={{ backgroundColor: '#171717', border: '1px solid #333', borderRadius: '8px' }} itemStyle={{ color: '#e5e5e5' }} formatter={(value: number | undefined) => `¥${(value ?? 0).toLocaleString()}`} />
                 <Bar dataKey="avgPrice" fill="#82ca9d" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -835,6 +919,7 @@ export default function Dashboard() {
                     </div>
                   </th>
                   <th className="px-6 py-4 text-right">{t.spots}</th>
+                  <th className="px-6 py-4 text-right">{lang === 'ko' ? '참가비' : 'Price'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800">
@@ -860,6 +945,9 @@ export default function Dashboard() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <span className="text-white">{event.booked}</span> / {event.capacity}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      {typeof event.price === 'number' ? <span className="text-white">¥{event.price.toLocaleString()}</span> : <span className="text-neutral-600">-</span>}
                     </td>
                   </tr>
                 ))}

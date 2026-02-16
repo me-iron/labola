@@ -69,8 +69,15 @@ export async function GET(request: Request) {
         url: e.url,
         booked: e.booked,
         capacity: e.capacity,
-        status: e.status
+        status: e.status,
+        price: e.price ?? null
     }));
 
-    return NextResponse.json({ success: true, events, count: events.length });
+    // Find the most recent updated_at timestamp
+    const lastUpdated = allData.reduce((max, e) => {
+        if (e.updated_at && e.updated_at > max) return e.updated_at;
+        return max;
+    }, '');
+
+    return NextResponse.json({ success: true, events, count: events.length, lastUpdated: lastUpdated || null });
 }
