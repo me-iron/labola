@@ -109,13 +109,13 @@ export async function fetchDetailPrice(url: string): Promise<number | null> {
       const prices: number[] = [];
       // Match ¥X or ￥X
       const yenPrefix = line.matchAll(/[￥¥]\s*(\d[\d,]+)/g);
-      for (const m of yenPrefix) { const v = parseInt(m[1].replace(/,/g, ''), 10); if (v >= 500 && v < 20000) prices.push(v); }
+      for (const m of yenPrefix) { const v = parseInt(m[1].replace(/,/g, ''), 10); if (v >= 500 && v <= 3000) prices.push(v); }
       // Match X円
       const yenSuffix = line.matchAll(/(\d[\d,]+)\s*円/g);
-      for (const m of yenSuffix) { const v = parseInt(m[1].replace(/,/g, ''), 10); if (v >= 500 && v < 20000) prices.push(v); }
+      for (const m of yenSuffix) { const v = parseInt(m[1].replace(/,/g, ''), 10); if (v >= 500 && v <= 3000) prices.push(v); }
       // Match bare numbers after ：or : (e.g. "一律：1,100")
       const colonPrice = line.matchAll(/[：:]\s*(\d[\d,]+)/g);
-      for (const m of colonPrice) { const v = parseInt(m[1].replace(/,/g, ''), 10); if (v >= 500 && v < 20000) prices.push(v); }
+      for (const m of colonPrice) { const v = parseInt(m[1].replace(/,/g, ''), 10); if (v >= 500 && v <= 3000) prices.push(v); }
       return [...new Set(prices)];
     };
 
@@ -142,7 +142,7 @@ export async function fetchDetailPrice(url: string): Promise<number | null> {
         const rangeMatch = line.match(/(\d[\d,]+)\s*円?\s*[~〜]\s*(\d[\d,]+)\s*円?/);
         if (rangeMatch) {
           const high = parseInt(rangeMatch[2].replace(/,/g, ''), 10);
-          if (high >= 500 && high < 20000) return high;
+          if (high >= 500 && high <= 3000) return high;
         }
         const prices = extractPrices(line);
         if (prices.length > 0) return prices[0];
@@ -157,16 +157,14 @@ export async function fetchDetailPrice(url: string): Promise<number | null> {
     }
 
     // ── Pattern D: MAX PRICE Strategy (Fallback) ──
-    // If all else fails, find the highest number between 500 and 10000 in the main text block.
-    // This assumes "Visitor" price is usually the highest number shown.
+    // If all else fails, find the highest number between 500 and 3000 in the price cell.
+    // Capped at 3000 to exclude team fees (5000+) and focus on individual male guest pricing.
     const allNumbers = fullText.match(/\d[\d,]*\d/g) || [];
     const candidates: number[] = [];
     for (const numStr of allNumbers) {
       const v = parseInt(numStr.replace(/,/g, ''), 10);
-      // Reasonable range for individual futsal: 500 yen ~ 10,000 yen
-      // Exclude likely years like 2025, 2026 if they are alone? No, price can be 2026 yen.
-      // But typically prices are 100-units. 2026 is rare.
-      if (v >= 500 && v <= 10000) {
+      // Individual futsal in Tokyo: 500 ~ 3,000 yen
+      if (v >= 500 && v <= 3000) {
         candidates.push(v);
       }
     }
