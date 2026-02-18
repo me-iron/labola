@@ -234,6 +234,13 @@ export async function crawlListPage(dateStr: string, page: number): Promise<{ ev
       let startTime = time.split('-')[0]?.trim() || time;
       if (/^\d:/.test(startTime)) startTime = '0' + startTime;
 
+      // ── SCOPE REFINEMENT: TOKYO ONLY ──
+      // User requested to limit scope to Tokyo for better accuracy.
+      // We filter here because direct URL filtering (area=tokyo) was unreliable.
+      if (!address.includes('東京') && !region?.includes('東京')) {
+        return; // Skip non-Tokyo events
+      }
+
       events.push({
         id: eventId,
         date: `${dateDay} (${dateWeek})`,
