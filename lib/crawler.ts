@@ -156,6 +156,25 @@ export async function fetchDetailPrice(url: string): Promise<number | null> {
       if (prices.length > 0) return prices[0];
     }
 
+    // ── Pattern D: MAX PRICE Strategy (Fallback) ──
+    // If all else fails, find the highest number between 500 and 10000 in the main text block.
+    // This assumes "Visitor" price is usually the highest number shown.
+    const allNumbers = fullText.match(/\d[\d,]*\d/g) || [];
+    const candidates: number[] = [];
+    for (const numStr of allNumbers) {
+      const v = parseInt(numStr.replace(/,/g, ''), 10);
+      // Reasonable range for individual futsal: 500 yen ~ 10,000 yen
+      // Exclude likely years like 2025, 2026 if they are alone? No, price can be 2026 yen.
+      // But typically prices are 100-units. 2026 is rare.
+      if (v >= 500 && v <= 10000) {
+        candidates.push(v);
+      }
+    }
+
+    if (candidates.length > 0) {
+      return Math.max(...candidates);
+    }
+
     return null;
   } catch {
     return null;

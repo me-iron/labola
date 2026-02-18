@@ -1,124 +1,98 @@
-// Diagnostic: crawl one day, fetch detail pages, report which events have no price and why
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-const BASE_URL = 'https://labola.jp/r/event/?area=&kind=individual&category=futsal';
-
-async function getEventUrls(dateStr) {
-    const events = [];
-    let page = 1;
-    let keepFetching = true;
-    while (keepFetching && page <= 5) { // limit to 5 pages for speed
-        const url = `${BASE_URL}&hold_on=${dateStr}&page=${page}`;
-        try {
-            const { data } = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 10000 });
-            const $ = cheerio.load(data);
-            const cards = $('.c-eventcard');
-            if (cards.length === 0) break;
-            cards.each((_, el) => {
-                const a = $(el).find('.c-eventcard__title a');
-                const href = a.attr('href') || '';
-                const fullUrl = href.startsWith('http') ? href : `https://labola.jp${href}`;
-                events.push({ url: fullUrl, title: a.text().trim().substring(0, 40) });
-            });
-            if (!$('.c-pagination__link:contains("＞")').length) break;
-            page++;
-        } catch (e) { break; }
-    }
-    return events;
-}
-
-async function diagnosePrice(url) {
+async function getSampleEvents() {
+    console.log('Fetching sample events list...');
+    // Fetch a list page to getting fresh URLs
+    const url = 'https://labola.jp/r/event/?area=&kind=individual&category=futsal';
     try {
-        const { data } = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 8000 });
+        const { data } = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
         const $ = cheerio.load(data);
-
-        // Try to find price row
-        let priceTd = null;
-        let method = '';
-        const commentRow = $('tr#comment td');
-        if (commentRow.length) { priceTd = commentRow; method = 'tr#comment'; }
-        else {
-            $('table tr').each((_, tr) => {
-                const th = $(tr).find('th').text();
-                if (th.includes('料金') || th.includes('参加費')) { priceTd = $(tr).find('td'); method = 'th:' + th.trim().substring(0, 10); return false; }
-            });
-        }
-
-        if (!priceTd) return { status: 'NO_ROW', method: 'none', detail: 'No price row found' };
-
-        const tdHtml = priceTd.html() || '';
-        const fullText = priceTd.text().trim();
-        const hasBTag = priceTd.find('b').length > 0;
-        const hasFontTag = priceTd.find('font').length > 0;
-        const hasDivPre = priceTd.find('div.pre').length > 0;
-
-        // Try structured <b> extraction
-        const planBlocks = tdHtml.split(/<br\s*\/?>/i).map(b => b.trim()).filter(Boolean);
-        let bCount = 0;
-        for (const block of planBlocks) {
-            const b$ = cheerio.load(block);
-            if (b$('b').first().text().trim()) bCount++;
-        }
-
-        // Try free text
-        const yenMatches = fullText.match(/\d[\d,]+\s*円/g) || [];
-
-        return {
-            status: (bCount > 0 || yenMatches.length > 0) ? 'HAS_PRICE' : 'NO_PRICE_DATA',
-            method,
-            hasBTag: bCount > 0,
-            hasFontTag,
-            hasDivPre,
-            bBlockCount: bCount,
-            yenMatches: yenMatches.length,
-            textPreview: fullText.substring(0, 120).replace(/\n/g, ' '),
-            htmlSnippet: tdHtml.substring(0, 200)
-        };
+        const links = [];
+        $('.c-eventcard__title a').each((i, el) => {
+            if (i < 5) {
+                const href = $(el).attr('href');
+                links.push(href.startsWith('http') ? href : 'https://labola.jp' + href);
+            }
+        });
+        return links;
     } catch (e) {
-        return { status: 'ERROR', detail: e.message };
+        console.error('Failed to fetch list:', e.message);
+        return [];
     }
 }
 
-(async () => {
-    const dateStr = '2026-02-16';
-    console.log(`Crawling events for ${dateStr}...`);
-    const events = await getEventUrls(dateStr);
-    console.log(`Found ${events.length} events. Diagnosing prices...\n`);
+function extractMaxPrice($) {
+    // 1. naive text scan for numbers 500-5000
+    const text = $('body').text();
+    const numbers = text.match(/\d{3,5}/g) || [];
+    const validPrices = numbers.map(n => parseInt(n, 10))
+        .filter(n => n >= 500 && n <= 3000); // Filter for reasonable individual futsal prices
+    return validPrices.length ? Math.max(...validPrices) : null;
+}
 
-    const BATCH = 10;
-    const failures = [];
-    let successCount = 0;
-    let totalChecked = 0;
-
-    for (let i = 0; i < events.length; i += BATCH) {
-        const batch = events.slice(i, i + BATCH);
-        const results = await Promise.all(batch.map(e => diagnosePrice(e.url)));
-        results.forEach((r, idx) => {
-            totalChecked++;
-            const event = batch[idx];
-            if (r.status === 'HAS_PRICE') {
-                successCount++;
-            } else {
-                failures.push({ ...event, ...r });
-                console.log(`❌ ${event.title}`);
-                console.log(`   URL: ${event.url}`);
-                console.log(`   Status: ${r.status} | Method: ${r.method}`);
-                if (r.textPreview) console.log(`   Text: ${r.textPreview}`);
-                if (r.htmlSnippet) console.log(`   HTML: ${r.htmlSnippet}`);
-                console.log();
+function extractDetailPrice($) {
+    // Replicating current logic from crawler.ts approximately to compare
+    let priceTd = null;
+    const commentRow = $('tr#comment td');
+    if (commentRow.length) priceTd = commentRow;
+    else {
+        $('table tr').each((_, tr) => {
+            const th = $(tr).find('th').text();
+            if (th.includes('料金') || th.includes('参加費')) {
+                priceTd = $(tr).find('td');
+                return false; // break
             }
         });
     }
 
-    console.log(`\n=== SUMMARY ===`);
-    console.log(`Total: ${totalChecked} | Success: ${successCount} | Failures: ${failures.length}`);
-    console.log(`Success rate: ${(successCount / totalChecked * 100).toFixed(1)}%`);
+    if (!priceTd) return 'NO_TD_FOUND';
 
-    if (failures.length > 0) {
-        console.log('\n=== FAILURE PATTERNS ===');
-        const byStatus = {};
-        failures.forEach(f => { byStatus[f.status] = (byStatus[f.status] || 0) + 1; });
-        console.log(byStatus);
+    const fullText = priceTd.text().trim();
+    if (fullText.includes('無料') && !fullText.match(/[1-9]/)) return 0;
+
+    // Pattern A/B: <b>...</b>
+    const bTags = [];
+    priceTd.find('b').each((_, el) => {
+        bTags.push($(el).text().trim());
+    });
+
+    return {
+        text: fullText.substring(0, 100).replace(/\n/g, ' '),
+        bTags: bTags,
+        // ... (complex logic omitted for brevity, just seeing what we have)
+    };
+}
+
+(async () => {
+    const links = await getSampleEvents();
+    if (links.length === 0) {
+        console.log('No links found.');
+        return;
+    }
+
+    console.log(`Analyzing ${links.length} events...\n`);
+
+    for (const url of links) {
+        try {
+            console.log(`URL: ${url}`);
+            const { data } = await axios.get(url, {
+                timeout: 5000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+            });
+            const $ = cheerio.load(data);
+
+            const currentExtraction = extractDetailPrice($);
+            const maxPrice = extractMaxPrice($);
+
+            console.log('  Current Logic sees:', JSON.stringify(currentExtraction));
+            console.log('  Max Price strategy:', maxPrice);
+            console.log('-----------------------------------');
+
+        } catch (e) {
+            console.error(`  Error: ${e.message}`);
+        }
     }
 })();
