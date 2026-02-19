@@ -67,6 +67,7 @@ export async function fetchDetailPrice(url: string): Promise<number | null> {
       if (!numStr) continue;
 
       const price = parseInt(numStr, 10);
+      if (price < 500 || price > 3000) continue;  // 개인 참가비 범위(500~3000엔)만 허용
       const targetSpan = block$('span.f12').text().trim();
       const labelText = block$.text().trim();
 
@@ -94,7 +95,10 @@ export async function fetchDetailPrice(url: string): Promise<number | null> {
 
       // Priority 4: Non-discount plan with highest price (likely visitor/standard)
       const nonDiscount = plans.filter(p => !p.isDiscount && p.price > 0);
-      if (nonDiscount.length > 0) return Math.max(...nonDiscount.map(p => p.price));
+      if (nonDiscount.length > 0) {
+        const maxPrice = Math.max(...nonDiscount.map(p => p.price));
+        if (maxPrice <= 3000) return maxPrice;
+      }
 
       // Priority 5: First plan
       return plans[0].price;

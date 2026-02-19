@@ -2,20 +2,20 @@ name: Daily Crawl
 
 on:
   schedule:
-    # Runs at 00:00 UTC = 09:00 KST every day
-    - cron: '0 0 * * *'
+    # Runs at 22:00 UTC = 07:00 KST every day
+    - cron: '0 22 * * *'
   workflow_dispatch:
     # Allow manual trigger from GitHub UI
     inputs:
       days:
         description: 'Number of days to crawl'
         required: false
-        default: '14'
+        default: '30'
 
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    timeout-minutes: 90  # Safety limit (usually ~30-65 min)
+    timeout-minutes: 90  # Safety limit
 
     steps:
       - name: Checkout code
@@ -34,5 +34,5 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          CRAWL_DAYS: ${{ github.event.inputs.days || '14' }}
+          CRAWL_DAYS: ${{ github.event.inputs.days || '30' }}
         run: npx tsx scripts/daily-crawl.ts

@@ -41,7 +41,6 @@ interface AnalyticsData {
 }
 
 type Lang = 'ko' | 'ja';
-type Period = 1 | 7 | 14;
 
 const DICT = {
   ko: {
@@ -56,7 +55,7 @@ const DICT = {
     recentEvents: '전체 이벤트',
     date: '날짜', time: '시간', eventTitle: '제목',
     organizer: '주최자', status: '상태', spots: '인원',
-    period1: '1일', period7: '7일', period14: '14일',
+    period1: '오늘', period7: '7일', period14: '14일', period30: '30일', thisMonth: '이번 달',
     noData: '데이터가 없습니다. "데이터 업데이트"를 클릭하세요.',
     proceedingSubtext: '10명 이상 예약된 이벤트 비율',
     update: '업데이트', cleanup: '정리',
@@ -111,7 +110,7 @@ const DICT = {
     recentEvents: 'All Events',
     date: 'Date', time: 'Time', eventTitle: 'Title',
     organizer: 'Organizer', status: 'Status', spots: 'Spots',
-    period1: '1 Day', period7: '7 Days', period14: '14 Days',
+    period1: 'Today', period7: '7 Days', period14: '14 Days', period30: '30 Days', thisMonth: 'This Month',
     noData: 'No data available. Click "Update Data" to fetch.',
     proceedingSubtext: 'Ratio of events with 10+ booked',
     update: 'Update', cleanup: 'Cleanup',
@@ -136,8 +135,10 @@ export default function Dashboard() {
   const [loadingDays, setLoadingDays] = useState<number | null>(null);
   const [priceProgress, setPriceProgress] = useState<string | null>(null);
   const [lang, setLang] = useState<Lang>('ko');
-  const [period, setPeriod] = useState<Period>(1);
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().substring(0, 10));
+  const today = new Date().toISOString().substring(0, 10);
+  const [startDate, setStartDate] = useState<string>(today);
+  const [endDate, setEndDate] = useState<string>(today);
+  const isSingleDay = startDate === endDate;
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -163,16 +164,7 @@ export default function Dashboard() {
   const fetchEvents = React.useCallback(async () => {
     setLoading(true);
     try {
-      const startDate = period === 1 ? selectedDate : new Date().toISOString().substring(0, 10);
-
-      // Calculate endDate for optimization
-      const endDate = new Date(startDate);
-      // For period 1, endDate is same day. For others, add period - 1 days.
-      endDate.setDate(endDate.getDate() + (period === 1 ? 0 : period - 1));
-      const endDateStr = endDate.toISOString().substring(0, 10);
-
-      // Read from DB with date range
-      const res = await fetch(`/api/events?startDate=${startDate}&endDate=${endDateStr}`);
+      const res = await fetch(`/api/events?startDate=${startDate}&endDate=${endDate}`);
       const data = await res.json();
 
       if (data.success) {
@@ -186,7 +178,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [period, selectedDate]);
+  }, [startDate, endDate]);
 
   const quickUpdate = async (days: number) => {
     setLoading(true);
@@ -283,14 +275,14 @@ export default function Dashboard() {
   };
 
   const cleanupData = async () => {
-    if (period !== 1) {
+    if (!isSingleDay) {
       alert(lang === 'ko' ? '1일 모드에서만 정리가 가능합니다.' : 'Cleanup is only available in 1-day mode.');
       return;
     }
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/cleanup?date=${selectedDate}`);
+      const res = await fetch(`/api/cleanup?date=${startDate}`);
       const data = await res.json();
 
       if (data.success) {
@@ -349,7 +341,7 @@ export default function Dashboard() {
   // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [period, selectedDate, selectedRegion, events]);
+  }, [startDate, endDate, selectedRegion, events]);
 
 
 
@@ -388,15 +380,7 @@ export default function Dashboard() {
 
       // 2. Date Filter
       const eventDate = e.isoDate || e.date;
-      if (period === 1) {
-        if (eventDate !== selectedDate) return false;
-      } else {
-        const today = new Date().toISOString().substring(0, 10);
-        const endDate = new Date();
-        endDate.setDate(new Date().getDate() + period - 1);
-        const endDateStr = endDate.toISOString().substring(0, 10);
-        if (!(eventDate >= today && eventDate <= endDateStr)) return false;
-      }
+      if (!(eventDate >= startDate && eventDate <= endDate)) return false;
 
       // 3. Keyword Search (title, stadium)
       if (searchKeyword.trim()) {
@@ -451,7 +435,7 @@ export default function Dashboard() {
     });
 
     return result;
-  }, [events, selectedRegion, period, selectedDate, searchKeyword, selectedStatuses, sortField, sortDirection]);
+  }, [events, selectedRegion, startDate, endDate, searchKeyword, selectedStatuses, sortField, sortDirection]);
 
   const analytics = React.useMemo((): AnalyticsData => {
     const byDateMap = new Map<string, { supply: number; booked: number; count: number; proceeding: number }>();
@@ -470,11 +454,11 @@ export default function Dashboard() {
     filteredEvents.forEach(event => {
       organizers.add(event.stadium);
 
-      // If period is 1, we want hourly aggregation. Use `startTime` for proper sorting.
-      // If period > 1, we want daily aggregation. Use `isoDate`.
-      let dateKey = period === 1 ? (event.startTime || event.time.split('-')[0]) : (event.isoDate || event.date);
+      // If single day, we want hourly aggregation. Use `startTime` for proper sorting.
+      // If multi-day, we want daily aggregation. Use `isoDate`.
+      let dateKey = isSingleDay ? (event.startTime || event.time.split('-')[0]) : (event.isoDate || event.date);
       // Pad single-digit hours: "6:30" → "06:30" for correct chronological sorting
-      if (period === 1 && dateKey && /^\d:/.test(dateKey)) {
+      if (isSingleDay && dateKey && /^\d:/.test(dateKey)) {
         dateKey = '0' + dateKey;
       }
 
@@ -503,8 +487,8 @@ export default function Dashboard() {
         proceedingCount++;
       }
 
-      // Price Analytics
-      if (typeof event.price === 'number') {
+      // Price Analytics (cap at 3000 yen — individual futsal only)
+      if (typeof event.price === 'number' && event.price >= 500 && event.price <= 3000) {
         // By Region
         const regionKey = event.region || 'Unknown';
         const currentRegionPrice = priceByRegion.get(regionKey) || { total: 0, count: 0 };
@@ -523,16 +507,12 @@ export default function Dashboard() {
       }
     });
 
-    // Fill missing dates with 0 for Charts (Only for Period > 1)
-    if (period > 1) {
-      const today = new Date();
-      for (let i = 0; i < period; i++) {
-        const d = new Date(today);
-        d.setDate(today.getDate() + i);
+    // Fill missing dates with 0 for Charts (Only for multi-day)
+    if (!isSingleDay) {
+      const start = new Date(startDate + 'T00:00:00');
+      const end = new Date(endDate + 'T00:00:00');
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
         const iso = d.toISOString().substring(0, 10);
-
-        // We need to match the key used above. 
-        // Above uses `event.isoDate` matching `iso`.
         if (!byDateMap.has(iso)) {
           byDateMap.set(iso, { supply: 0, booked: 0, count: 0, proceeding: 0 });
         }
@@ -540,10 +520,10 @@ export default function Dashboard() {
     }
 
     const byDate = Array.from(byDateMap.entries()).map(([key, data]) => {
-      // key is isoDate (YYYY-MM-DD) for period > 1
-      // key is startTime (HH:MM) for period = 1
+      // key is isoDate (YYYY-MM-DD) for multi-day
+      // key is startTime (HH:MM) for single day
       let dateLabel = key;
-      if (period > 1) {
+      if (!isSingleDay) {
         // Convert YYYY-MM-DD to "MM-DD"
         dateLabel = key.substring(5);
       }
@@ -554,7 +534,7 @@ export default function Dashboard() {
         ...data
       };
     }).sort((a, b) => {
-      // For period === 1 (time-based), sort by time string which works correctly for HH:MM format
+      // For single day (time-based), sort by time string which works correctly for HH:MM format
       // "08:30" < "19:00" in string comparison, which is correct chronological order
       return a.fullDate.localeCompare(b.fullDate);
     });
@@ -587,7 +567,7 @@ export default function Dashboard() {
       avgPriceByRegion,
       avgPriceByStadium
     };
-  }, [filteredEvents, period, lang]);
+  }, [filteredEvents, isSingleDay, startDate, endDate, lang]);
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 p-8 font-sans selection:bg-indigo-500/30">
@@ -603,6 +583,9 @@ export default function Dashboard() {
               <Link href="/upload" className="text-sm font-medium text-neutral-500 hover:text-indigo-400 transition-colors flex items-center gap-1 border border-neutral-800 rounded-full px-3 py-1 bg-neutral-900/50">
                 <Upload className="w-3 h-3" />
                 Upload CSV
+              </Link>
+              <Link href="/venues" className="text-sm font-medium text-neutral-500 hover:text-indigo-400 transition-colors flex items-center gap-1 border border-neutral-800 rounded-full px-3 py-1 bg-neutral-900/50">
+                🏟️ {lang === 'ko' ? '구장 DB' : 'Stadium DB'}
               </Link>
             </div>
             <p className="text-neutral-400 mt-1">
@@ -633,21 +616,28 @@ export default function Dashboard() {
               </select>
             </div>
 
-            {period === 1 && (
-              <div className="flex items-center bg-neutral-900 rounded-lg p-1 border border-neutral-800">
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="bg-transparent text-white text-sm px-3 py-1.5 outline-none font-medium [&::-webkit-calendar-picker-indicator]:invert"
-                />
-              </div>
-            )}
+            <div className="flex items-center gap-1 bg-neutral-900 rounded-lg p-1 border border-neutral-800">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => { setStartDate(e.target.value); if (e.target.value > endDate) setEndDate(e.target.value); }}
+                className="bg-transparent text-white text-sm px-2 py-1.5 outline-none font-medium [&::-webkit-calendar-picker-indicator]:invert w-[130px]"
+              />
+              <span className="text-neutral-500 text-sm">~</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => { setEndDate(e.target.value); if (e.target.value < startDate) setStartDate(e.target.value); }}
+                className="bg-transparent text-white text-sm px-2 py-1.5 outline-none font-medium [&::-webkit-calendar-picker-indicator]:invert w-[130px]"
+              />
+            </div>
 
             <div className="flex items-center bg-neutral-900 rounded-lg p-1 border border-neutral-800">
-              <button onClick={() => setPeriod(1)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 1 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{t.period1}</button>
-              <button onClick={() => setPeriod(7)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 7 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{t.period7}</button>
-              <button onClick={() => setPeriod(14)} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", period === 14 ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{t.period14}</button>
+              <button onClick={() => { const d = new Date().toISOString().substring(0, 10); setStartDate(d); setEndDate(d); }} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", isSingleDay ? "bg-indigo-600 text-white shadow-lg" : "text-neutral-400 hover:text-white")}>{t.period1}</button>
+              <button onClick={() => { const d = new Date(); const s = d.toISOString().substring(0, 10); d.setDate(d.getDate() + 6); setStartDate(s); setEndDate(d.toISOString().substring(0, 10)); }} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", "text-neutral-400 hover:text-white")}>{t.period7}</button>
+              <button onClick={() => { const d = new Date(); const s = d.toISOString().substring(0, 10); d.setDate(d.getDate() + 13); setStartDate(s); setEndDate(d.toISOString().substring(0, 10)); }} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", "text-neutral-400 hover:text-white")}>{t.period14}</button>
+              <button onClick={() => { const d = new Date(); const s = d.toISOString().substring(0, 10); d.setDate(d.getDate() + 29); setStartDate(s); setEndDate(d.toISOString().substring(0, 10)); }} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", "text-neutral-400 hover:text-white")}>{t.period30}</button>
+              <button onClick={() => { const now = new Date(); const y = now.getFullYear(); const m = now.getMonth(); const first = new Date(y, m, 1).toISOString().substring(0, 10); const last = new Date(y, m + 1, 0).toISOString().substring(0, 10); setStartDate(first); setEndDate(last); }} className={cn("px-3 py-1.5 rounded-md text-sm font-medium transition-all", "text-neutral-400 hover:text-white")}>{t.thisMonth}</button>
             </div>
 
             <div className="flex items-center bg-neutral-900 rounded-lg p-1 border border-neutral-800">
@@ -669,8 +659,8 @@ export default function Dashboard() {
 
             <button
               onClick={cleanupData}
-              disabled={loading || period !== 1}
-              title={period !== 1 ? 'Only available in 1-day mode' : 'Cleanup deleted events'}
+              disabled={loading || !isSingleDay}
+              title={!isSingleDay ? 'Only available in 1-day mode' : 'Cleanup deleted events'}
               className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-200",
                 "bg-red-900/50 hover:bg-red-800/70 active:bg-red-700/80 border border-red-800/50",
@@ -739,13 +729,13 @@ export default function Dashboard() {
             label={t.totalEvents}
             value={analytics.totalEvents}
             icon={<MapPin className="w-5 h-5 text-emerald-400" />}
-            subtext={`${period === 1 ? (lang === 'ko' ? '선택일' : 'Selected Date') : period + (lang === 'ko' ? '일' : ' Days')}`}
+            subtext={isSingleDay ? (lang === 'ko' ? '선택일' : 'Selected Date') : `${startDate.substring(5)} ~ ${endDate.substring(5)}`}
           />
           <StatCard
             label={t.organizers}
             value={analytics.totalOrganizers}
             icon={<Users className="w-5 h-5 text-cyan-400" />}
-            subtext={`${period === 1 ? (lang === 'ko' ? '선택일' : 'Selected Date') : period + (lang === 'ko' ? '일' : ' Days')}`}
+            subtext={isSingleDay ? (lang === 'ko' ? '선택일' : 'Selected Date') : `${startDate.substring(5)} ~ ${endDate.substring(5)}`}
           />
           <StatCard
             label={t.totalCapacity}
