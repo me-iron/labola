@@ -1,6 +1,25 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 
+// Helper for retrying axios requests to handle temporary network glitches
+async function fetchWithRetry(url: string, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+        timeout: 8000
+      });
+    } catch (error: any) {
+      if (i === retries - 1) throw error;
+      console.warn(`[Retry ${i + 1}/${retries}] Failed to fetch ${url}: ${error.message}`);
+      await new Promise(res => setTimeout(res, 1000 * Math.pow(2, i)));
+    }
+  }
+  throw new Error('Unreachable');
+}
+
 export interface Event {
   id: string;
   date: string;
@@ -22,12 +41,7 @@ const BASE_URL = 'https://labola.jp/r/event/?area=&kind=individual&category=futs
 
 export async function fetchDetailPrice(url: string): Promise<number | null> {
   try {
-    const { data } = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      },
-      timeout: 8000
-    });
+    const { data } = await fetchWithRetry(url);
     const $ = cheerio.load(data);
 
     // Find the price row: tr#comment or th containing 料金
@@ -193,12 +207,7 @@ export async function crawlListPage(dateStr: string, page: number): Promise<{ ev
   const events: Event[] = [];
 
   try {
-    const { data } = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      },
-      timeout: 8000
-    });
+    const { data } = await fetchWithRetry(url);
     const $ = cheerio.load(data);
     const eventCards = $('.c-eventcard');
 
