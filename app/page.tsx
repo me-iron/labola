@@ -576,17 +576,22 @@ export default function Dashboard() {
         {/* Header & Controls */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 border-b border-neutral-800 pb-6">
           <div>
-            <div className="flex items-center gap-4">
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
+            <div className="flex flex-col xl:flex-row items-start xl:items-center gap-4">
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent shrink-0">
                 {t.title}
               </h1>
-              <Link href="/upload" className="text-sm font-medium text-neutral-500 hover:text-indigo-400 transition-colors flex items-center gap-1 border border-neutral-800 rounded-full px-3 py-1 bg-neutral-900/50">
-                <Upload className="w-3 h-3" />
-                Upload CSV
-              </Link>
-              <Link href="/venues" className="text-sm font-medium text-neutral-500 hover:text-indigo-400 transition-colors flex items-center gap-1 border border-neutral-800 rounded-full px-3 py-1 bg-neutral-900/50">
-                🏟️ {lang === 'ko' ? '구장 DB' : 'Stadium DB'}
-              </Link>
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 xl:pb-0">
+                <Link href="/upload" className="text-xs font-semibold text-neutral-400 hover:text-indigo-400 transition-colors flex items-center justify-center gap-1.5 border border-neutral-800 rounded-full bg-neutral-900/50 w-[100px] h-8 shrink-0">
+                  <Upload className="w-3.5 h-3.5" />
+                  Upload
+                </Link>
+                <Link href="/venues" className="text-xs font-semibold text-neutral-400 hover:text-indigo-400 transition-colors flex items-center justify-center gap-1.5 border border-neutral-800 rounded-full bg-neutral-900/50 w-[100px] h-8 shrink-0">
+                  🏟️ Stadiums
+                </Link>
+                <Link href="/map" className="text-xs font-semibold text-neutral-400 hover:text-indigo-400 transition-colors flex items-center justify-center gap-1.5 border border-neutral-800 rounded-full bg-neutral-900/50 w-[100px] h-8 shrink-0">
+                  🗺️ Map
+                </Link>
+              </div>
             </div>
             <p className="text-neutral-400 mt-1">
               {t.subtitle}
